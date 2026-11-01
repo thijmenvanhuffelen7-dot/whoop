@@ -59,6 +59,7 @@ export class BleSource extends EventTarget {
     this.retries = 0;
     this.retryTimer = null;
     this.status = 'idle';
+    this.persistent = false; // nachtmeting: blijf onbeperkt opnieuw proberen
     this._onDisconnected = this._onDisconnected.bind(this);
     this._onHr = this._onHr.bind(this);
     this._onBattery = this._onBattery.bind(this);
@@ -155,9 +156,9 @@ export class BleSource extends EventTarget {
   _scheduleReconnect() {
     clearTimeout(this.retryTimer);
     this.retries += 1;
-    if (this.retries > MAX_RETRIES) { this._setStatus('lost'); return; }
+    if (this.retries > MAX_RETRIES && !this.persistent) { this._setStatus('lost'); return; }
     const delay = Math.min(1000 * 2 ** (this.retries - 1), 15000);
-    this._setStatus('reconnecting', { attempt: this.retries, max: MAX_RETRIES, delay });
+    this._setStatus('reconnecting', { attempt: this.retries, max: this.persistent ? null : MAX_RETRIES, delay });
     this.retryTimer = setTimeout(async () => {
       if (this.manual) return;
       try {

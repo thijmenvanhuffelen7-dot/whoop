@@ -1,5 +1,5 @@
 // Service worker: app-shell offline beschikbaar maken.
-const VERSION = 'whoop-v1'; // verhoog bij elke update
+const VERSION = 'whoop-v2'; // verhoog bij elke update
 const SHELL = [
   './',
   './index.html',
@@ -10,6 +10,7 @@ const SHELL = [
   './js/hrv.js',
   './js/db.js',
   './js/chart.js',
+  './js/metrics.js',
   './manifest.webmanifest',
   './icons/icon.svg',
   './icons/icon-192.png',

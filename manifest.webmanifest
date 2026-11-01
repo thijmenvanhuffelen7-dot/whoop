@@ -3,7 +3,7 @@
   "short_name": "WHOOP",
   "description": "Live hartslag en HRV van je eigen band via Web Bluetooth. Alles blijft lokaal.",
   "lang": "nl",
-  "start_url": "./#live",
+  "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",

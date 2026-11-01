@@ -48,6 +48,71 @@
 
   <main id="main" tabindex="-1">
 
+    <!-- ================= VANDAAG ================= -->
+    <section class="screen" id="screen-today" aria-labelledby="h-today" hidden>
+      <div class="title-row">
+        <h1 class="screen-title" id="h-today">Vandaag</h1>
+        <span class="muted small" id="today-date"></span>
+      </div>
+
+      <div class="notice notice-info" id="today-cta" hidden>
+        <h2>Doe je ochtendmeting</h2>
+        <p>Een korte HRV-meting (of een nachtmeting) bepaalt je herstel van vandaag.</p>
+        <a class="btn btn-primary" href="#measure/hrv">Naar HRV-meting</a>
+      </div>
+
+      <div class="score-grid">
+        <a class="score" href="#trends" id="score-recovery" aria-describedby="rec-sub">
+          <span class="score-ring-wrap"><svg class="score-ring" viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="52" class="ring-track"/><circle cx="60" cy="60" r="52" class="ring-val" id="ring-recovery"/></svg><span class="score-val" id="rec-val">–</span></span>
+          <span class="score-label">Herstel</span>
+          <span class="score-sub" id="rec-sub">geen meting</span>
+        </a>
+        <a class="score" href="#live" id="score-strain">
+          <span class="score-ring-wrap"><svg class="score-ring" viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="52" class="ring-track"/><circle cx="60" cy="60" r="52" class="ring-val" id="ring-strain"/></svg><span class="score-val" id="strain-val">0,0</span></span>
+          <span class="score-label">Inspanning</span>
+          <span class="score-sub" id="strain-sub">van 21</span>
+        </a>
+        <a class="score" href="#measure/night" id="score-sleep">
+          <span class="score-ring-wrap"><svg class="score-ring" viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="52" class="ring-track"/><circle cx="60" cy="60" r="52" class="ring-val" id="ring-sleep"/></svg><span class="score-val" id="sleep-val">–</span></span>
+          <span class="score-label">Slaap</span>
+          <span class="score-sub" id="sleep-sub">geen nachtmeting</span>
+        </a>
+      </div>
+
+      <div class="card" id="target-card">
+        <div class="card-head"><h2 class="card-title">Inspanningsdoel</h2><span class="muted small" id="target-range"></span></div>
+        <div class="target-bar" aria-hidden="true"><span class="target-zone" id="target-zone"></span><span class="target-now" id="target-now"></span></div>
+        <p class="muted small" id="target-text">Doe eerst een ochtendmeting, dan krijg je een advies voor vandaag.</p>
+      </div>
+
+      <div class="stat-grid stat-grid-2">
+        <div class="stat"><span class="stat-label">Stress gem.</span><span class="stat-value"><span id="t-stress">–</span><small id="t-stress-l"></small></span></div>
+        <div class="stat"><span class="stat-label">Calorieën</span><span class="stat-value"><span id="t-kcal">–</span><small>kcal</small></span></div>
+        <div class="stat"><span class="stat-label">Rusthartslag</span><span class="stat-value"><span id="t-rhr">–</span><small>bpm</small></span></div>
+        <div class="stat"><span class="stat-label">HRV</span><span class="stat-value"><span id="t-hrv">–</span><small>ms</small></span></div>
+        <div class="stat"><span class="stat-label">Ademfrequentie</span><span class="stat-value"><span id="t-resp">–</span><small>/min</small></span></div>
+        <div class="stat"><span class="stat-label">VO₂max (schatting)</span><span class="stat-value"><span id="t-vo2">–</span></span></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2 class="card-title">Tijd in zones</h2><span class="muted small" id="zones-total"></span></div>
+        <div class="zone-bar" id="zone-bar" role="img" aria-label="Tijd in hartslagzones vandaag"></div>
+        <ul class="zone-legend" id="zone-legend"></ul>
+        <p class="muted small" id="zones-note">Telt alleen terwijl je band met de app verbonden is.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2 class="card-title">Slaapbehoefte vannacht</h2><span class="stat-value" id="need-val">–</span></div>
+        <p class="muted small" id="need-text"></p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2 class="card-title">Dagboek</h2><span class="muted small">over gisteren</span></div>
+        <fieldset class="journal" id="journal"><legend class="sr-only">Wat deed je gisteren?</legend></fieldset>
+        <p class="muted small">Na een paar weken zie je bij Trends hoe deze gewoontes je herstel beïnvloeden.</p>
+      </div>
+    </section>
+
     <!-- ================= LIVE ================= -->
     <section class="screen" id="screen-live" aria-labelledby="h-live">
       <h1 class="sr-only" id="h-live">Live</h1>
@@ -114,6 +179,18 @@
           <span class="stat-label">Min / max</span>
           <span class="stat-value"><span id="live-minmax">–</span></span>
         </div>
+        <div class="stat">
+          <span class="stat-label">Stress</span>
+          <span class="stat-value"><span id="live-stress">–</span><small id="live-stress-l"></small></span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Inspanning</span>
+          <span class="stat-value"><span id="live-strain">–</span></span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Calorieën</span>
+          <span class="stat-value"><span id="live-kcal">–</span><small>kcal</small></span>
+        </div>
       </div>
 
       <div class="actions" id="actions-idle">
@@ -128,9 +205,23 @@
       </div>
 
       <div class="actions" id="actions-connected" hidden>
+        <div class="field" id="activity-field">
+          <label for="activity">Activiteit voor je training</label>
+          <select id="activity">
+            <option value="Hardlopen">Hardlopen</option>
+            <option value="Fietsen">Fietsen</option>
+            <option value="Krachttraining">Krachttraining</option>
+            <option value="Wandelen">Wandelen</option>
+            <option value="HIIT">HIIT</option>
+            <option value="Zwemmen">Zwemmen</option>
+            <option value="Yoga">Yoga</option>
+            <option value="Teamsport">Teamsport</option>
+            <option value="Overig" selected>Overig</option>
+          </select>
+        </div>
         <button class="btn btn-primary btn-lg" type="button" id="btn-record" aria-pressed="false">
           <span class="rec-dot" aria-hidden="true"></span>
-          <span id="btn-record-text">Start sessie-opname</span>
+          <span id="btn-record-text">Start training</span>
         </button>
         <p class="muted small center" id="record-info" hidden></p>
         <div class="actions-row">
@@ -147,8 +238,15 @@
     </section>
 
     <!-- ================= HRV ================= -->
-    <section class="screen" id="screen-hrv" aria-labelledby="h-hrv" hidden>
-      <h1 class="screen-title" id="h-hrv">HRV-meting</h1>
+    <section class="screen" id="screen-measure" aria-labelledby="h-measure" hidden>
+      <h1 class="screen-title" id="h-measure">Meten</h1>
+      <nav class="subnav" aria-label="Soort meting">
+        <a href="#measure/hrv" data-panel="hrv">HRV</a>
+        <a href="#measure/breath" data-panel="breath">Ademhaling</a>
+        <a href="#measure/night" data-panel="night">Nacht</a>
+      </nav>
+
+      <div class="panel" id="panel-hrv">
 
       <div id="hrv-intro">
         <div class="card">
@@ -198,15 +296,15 @@
           <div class="stat"><span class="stat-label">SDNN</span><span class="stat-value"><span id="res-sdnn">–</span><small>ms</small></span></div>
           <div class="stat"><span class="stat-label">Gem. hartslag</span><span class="stat-value"><span id="res-hr">–</span><small>bpm</small></span></div>
           <div class="stat"><span class="stat-label">Slagen gebruikt</span><span class="stat-value" id="res-beats">–</span></div>
+          <div class="stat"><span class="stat-label">Ademfrequentie</span><span class="stat-value"><span id="res-resp">–</span><small>/min</small></span></div>
+          <div class="stat"><span class="stat-label">Herstel vandaag</span><span class="stat-value"><span id="res-rec">–</span></span></div>
         </div>
         <p class="muted small center" id="res-filtered"></p>
         <button class="btn btn-primary btn-lg" type="button" id="btn-hrv-done">Klaar</button>
       </div>
-    </section>
+      </div>
 
-    <!-- ================= ADEMHALING ================= -->
-    <section class="screen" id="screen-breath" aria-labelledby="h-breath" hidden>
-      <h1 class="screen-title" id="h-breath">Ademhaling</h1>
+      <div class="panel" id="panel-breath" hidden>
 
       <div class="breath-stage">
         <div class="breath-circle" id="breath-circle" aria-hidden="true">
@@ -258,40 +356,102 @@
         </div>
         <button class="btn btn-primary btn-lg" type="button" id="btn-breath-done">Klaar</button>
       </div>
+      </div>
+
+      <div class="panel" id="panel-night" hidden>
+        <div id="night-intro">
+          <div class="card">
+            <h2 class="card-title">Nachtmeting</h2>
+            <p>Meet je hartslag, HRV en ademfrequentie terwijl je slaapt. Daarmee worden je slaap en herstel nauwkeuriger.</p>
+            <ul class="checklist">
+              <li>Leg je telefoon aan de oplader, dicht bij je bed</li>
+              <li>Laat deze pagina open en zet automatische vergrendeling uit</li>
+              <li>Houd je band verbonden (de app verbindt zelf opnieuw)</li>
+            </ul>
+          </div>
+          <button class="btn btn-primary btn-lg" type="button" id="btn-night-start">Start nachtmeting</button>
+          <p class="muted small center" id="night-hint"></p>
+        </div>
+        <div id="night-result" hidden>
+          <div class="card result-card">
+            <span class="muted small" id="night-date"></span>
+            <div class="result-main"><span class="result-big" id="night-dur">–</span><span class="result-unit">in bed</span></div>
+            <p class="compare" id="night-text"></p>
+          </div>
+          <div class="stat-grid stat-grid-2">
+            <div class="stat"><span class="stat-label">Laagste hartslag</span><span class="stat-value"><span id="night-min">–</span><small>bpm</small></span></div>
+            <div class="stat"><span class="stat-label">HRV (RMSSD)</span><span class="stat-value"><span id="night-rmssd">–</span><small>ms</small></span></div>
+            <div class="stat"><span class="stat-label">Ademfrequentie</span><span class="stat-value"><span id="night-resp">–</span><small>/min</small></span></div>
+            <div class="stat"><span class="stat-label">Herstel</span><span class="stat-value" id="night-rec">–</span></div>
+          </div>
+          <canvas id="night-chart" class="trend-chart" role="img" aria-label="Hartslag tijdens de nacht"></canvas>
+          <button class="btn btn-primary btn-lg" type="button" id="btn-night-done">Klaar</button>
+        </div>
+      </div>
     </section>
 
     <!-- ================= GESCHIEDENIS ================= -->
-    <section class="screen" id="screen-history" aria-labelledby="h-history" hidden>
-      <h1 class="screen-title" id="h-history">Geschiedenis</h1>
+    <section class="screen" id="screen-trends" aria-labelledby="h-trends" hidden>
+      <h1 class="screen-title" id="h-trends">Trends</h1>
 
       <div class="card chart-card">
         <div class="card-head">
-          <h2 class="card-title">HRV-trend</h2>
-          <span class="muted small">RMSSD · 30 dagen</span>
+          <h2 class="card-title" id="trend-title">Herstel</h2>
+          <span class="muted small">30 dagen</span>
         </div>
-        <canvas id="trend-chart" class="trend-chart" role="img" aria-label="Trend van je RMSSD over de afgelopen 30 dagen"></canvas>
-        <p class="empty small" id="trend-empty" hidden>Nog geen HRV-metingen. Doe je eerste meting op het tabblad HRV.</p>
+        <fieldset class="chips chips-sm" aria-label="Maat">
+          <legend class="sr-only">Maat in de grafiek</legend>
+          <label><input type="radio" name="trend-metric" value="recovery" checked><span>Herstel</span></label>
+          <label><input type="radio" name="trend-metric" value="hrv"><span>HRV</span></label>
+          <label><input type="radio" name="trend-metric" value="rhr"><span>Rusthartslag</span></label>
+          <label><input type="radio" name="trend-metric" value="strain"><span>Inspanning</span></label>
+          <label><input type="radio" name="trend-metric" value="sleep"><span>Slaap</span></label>
+          <label><input type="radio" name="trend-metric" value="resp"><span>Ademhaling</span></label>
+        </fieldset>
+        <canvas id="trend-chart" class="trend-chart" role="img" aria-label="Trend over de afgelopen 30 dagen"></canvas>
+        <p class="empty small" id="trend-empty" hidden>Nog niet genoeg gegevens voor deze grafiek.</p>
       </div>
+
+      <div class="card">
+        <div class="card-head"><h2 class="card-title">Weekrapport</h2><span class="muted small">vs. vorige week</span></div>
+        <div class="report" id="week-report"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2 class="card-title">Gezondheidsmonitor</h2><span class="muted small">t.o.v. je 30-daagse basis</span></div>
+        <ul class="monitor" id="monitor"></ul>
+        <p class="muted small">Afwijkingen kunnen komen door slecht slapen, alcohol, ziekte of training. Dit is geen diagnose.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2 class="card-title">Inzichten uit je dagboek</h2></div>
+        <ul class="insights" id="insights"></ul>
+      </div>
+
+      <h2 class="section-title">Geschiedenis</h2>
 
       <fieldset class="chips" aria-label="Filter">
         <legend class="sr-only">Filter</legend>
         <label><input type="radio" name="hist-filter" value="all" checked><span>Alles</span></label>
         <label><input type="radio" name="hist-filter" value="hrv"><span>HRV</span></label>
         <label><input type="radio" name="hist-filter" value="breath"><span>Adem</span></label>
-        <label><input type="radio" name="hist-filter" value="session"><span>Sessies</span></label>
+        <label><input type="radio" name="hist-filter" value="night"><span>Nacht</span></label>
+        <label><input type="radio" name="hist-filter" value="session"><span>Trainingen</span></label>
       </fieldset>
 
       <ul class="history-list" id="history-list"></ul>
+      <button class="btn btn-secondary" type="button" id="btn-more" hidden>Toon meer</button>
       <div class="empty-state" id="history-empty" hidden>
         <svg viewBox="0 0 24 24" width="40" height="40" aria-hidden="true"><path d="M3 12h4l2-5 4 10 2-5h6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
         <p><strong>Nog niets opgeslagen</strong></p>
-        <p class="muted small">Metingen, ademsessies en opnames verschijnen hier. Alles blijft op dit toestel.</p>
+        <p class="muted small">Metingen, ademsessies, nachten en trainingen verschijnen hier. Alles blijft op dit toestel.</p>
       </div>
 
       <div class="actions-row">
-        <button class="btn btn-secondary" type="button" id="btn-export">Exporteer CSV</button>
-        <button class="btn btn-danger-ghost" type="button" id="btn-clear">Alles verwijderen</button>
+        <button class="btn btn-secondary" type="button" id="btn-export">Metingen CSV</button>
+        <button class="btn btn-secondary" type="button" id="btn-export-days">Dagen CSV</button>
       </div>
+      <button class="btn btn-danger-ghost" type="button" id="btn-clear">Alles verwijderen</button>
     </section>
 
     <!-- ================= INSTELLINGEN ================= -->
@@ -312,6 +472,32 @@
         <div class="field">
           <label for="set-rest">Rusthartslag</label>
           <input id="set-rest" name="restHr" type="number" inputmode="numeric" min="30" max="110" placeholder="bijv. 58">
+        </div>
+
+        <h2 class="card-title">Lichaam <span class="muted small">(voor calorieën)</span></h2>
+        <div class="field">
+          <span class="label" id="lbl-sex">Geslacht</span>
+          <div class="segmented" role="radiogroup" aria-labelledby="lbl-sex">
+            <label><input type="radio" name="sex" value="m"><span>Man</span></label>
+            <label><input type="radio" name="sex" value="v"><span>Vrouw</span></label>
+            <label><input type="radio" name="sex" value="x"><span>Anders</span></label>
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="set-weight">Gewicht (kg)</label>
+            <input id="set-weight" name="weight" type="number" inputmode="decimal" min="30" max="250" placeholder="bijv. 75">
+          </div>
+          <div class="field">
+            <label for="set-height">Lengte (cm)</label>
+            <input id="set-height" name="height" type="number" inputmode="numeric" min="120" max="230" placeholder="bijv. 180">
+          </div>
+        </div>
+
+        <h2 class="card-title">Slaap</h2>
+        <div class="field">
+          <label for="set-sleep">Basis-slaapbehoefte (uren)</label>
+          <input id="set-sleep" name="sleepNeed" type="number" inputmode="decimal" min="5" max="11" step="0.25" placeholder="8">
         </div>
 
         <h2 class="card-title">Metingen</h2>
@@ -338,36 +524,50 @@
         <h2 class="card-title">Over</h2>
         <p class="muted small">Alle gegevens worden alleen lokaal op dit toestel opgeslagen (IndexedDB). Er gaat niets naar een server.</p>
         <button class="btn btn-secondary" type="button" id="btn-onboarding">Introductie opnieuw bekijken</button>
+        <button class="btn btn-secondary" type="button" id="btn-sample">Voorbeelddata van 3 weken laden</button>
+        <p class="muted small">Handig om alle schermen te bekijken zonder band. Voorbeelddata is gemarkeerd als demo en kun je hier weer verwijderen.</p>
       </div>
 
       <p class="disclaimer">Persoonlijk gebruik. Geen medisch advies.</p>
+      <div class="card">
+        <h2 class="card-title">Wat deze app niet kan</h2>
+        <p class="muted small">Via Bluetooth deelt de band alleen hartslag en RR-intervallen. ECG, bloeddruk, zuurstofsaturatie (SpO₂), huidtemperatuur, onregelmatig-hartritmemeldingen, stappen en 24/7-meting op de achtergrond zijn daarom niet mogelijk. Herstel, inspanning, stress, VO₂max en calorieën zijn eigen schattingen, niet de berekeningen van WHOOP.</p>
+      </div>
       <p class="disclaimer muted small">Niet verbonden aan of goedgekeurd door WHOOP, Inc.</p>
     </section>
   </main>
 
   <!-- ================= TABBALK ================= -->
   <nav class="tabbar" aria-label="Hoofdmenu">
+    <a href="#today" class="tab" data-tab="today">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5a8.5 8.5 0 0 1 8.2 6.3"/><path d="M12 7.5v4.5l3 2"/></svg>
+      <span>Vandaag</span>
+    </a>
     <a href="#live" class="tab" data-tab="live">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l2.5-6 5 12 2.5-6h4" /></svg>
       <span>Live</span>
     </a>
-    <a href="#hrv" class="tab" data-tab="hrv">
+    <a href="#measure" class="tab" data-tab="measure">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.3-8.8-8.6C1.9 8.2 4 5 7.2 5c2 0 3.4 1 4.8 2.8C13.4 6 14.8 5 16.8 5 20 5 22.1 8.2 20.8 11.4 19 15.7 12 20 12 20z"/><path d="M7.5 12h2l1.2-2.2 2 4.4 1.3-2.2h2.5"/></svg>
-      <span>HRV</span>
+      <span>Meten</span>
     </a>
-    <a href="#breath" class="tab" data-tab="breath">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/></svg>
-      <span>Adem</span>
-    </a>
-    <a href="#history" class="tab" data-tab="history">
+    <a href="#trends" class="tab" data-tab="trends">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5"/><path d="M4 19h16"/><path d="M7 15l4-4 3 3 5-6"/></svg>
-      <span>Geschiedenis</span>
+      <span>Trends</span>
     </a>
     <a href="#settings" class="tab" data-tab="settings">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10"/><path d="M18 7h2"/><circle cx="16" cy="7" r="2"/><path d="M4 17h2"/><path d="M10 17h10"/><circle cx="8" cy="17" r="2"/></svg>
       <span>Instellingen</span>
     </a>
   </nav>
+
+  <!-- ================= NACHTMODUS ================= -->
+  <div class="night-overlay" id="night-overlay" role="dialog" aria-modal="true" aria-label="Nachtmeting loopt" hidden>
+    <span class="night-clock" id="night-clock">00:00</span>
+    <span class="night-info"><span id="night-elapsed">0:00</span> · <span id="night-hr">--</span> bpm</span>
+    <span class="night-status" id="night-status"></span>
+    <button class="btn btn-night" type="button" id="btn-night-stop">Ik ben wakker · stop meting</button>
+  </div>
 
   <!-- ================= ONBOARDING ================= -->
   <div class="onboarding" id="onboarding" role="dialog" aria-modal="true" aria-labelledby="ob-title" hidden>
