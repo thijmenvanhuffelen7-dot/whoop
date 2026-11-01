@@ -99,6 +99,8 @@
         <div class="stat"><span class="stat-label">HRV</span><span class="stat-value"><span id="t-hrv">–</span><small>ms</small></span></div>
         <div class="stat"><span class="stat-label">Ademfrequentie</span><span class="stat-value"><span id="t-resp">–</span><small>/min</small></span></div>
         <div class="stat"><span class="stat-label">VO₂max (schatting)</span><span class="stat-value"><span id="t-vo2">–</span></span></div>
+        <div class="stat" id="t-spo2-tile" hidden><span class="stat-label">Zuurstof (SpO₂)</span><span class="stat-value"><span id="t-spo2">–</span><small>%</small></span></div>
+        <div class="stat" id="t-temp-tile" hidden><span class="stat-label">Huidtemperatuur</span><span class="stat-value"><span id="t-temp">–</span><small>°C</small></span></div>
       </div>
 
       <div class="card">
@@ -451,6 +453,8 @@
           <label><input type="radio" name="trend-metric" value="strain"><span>Inspanning</span></label>
           <label><input type="radio" name="trend-metric" value="sleep"><span>Slaap</span></label>
           <label><input type="radio" name="trend-metric" value="resp"><span>Ademhaling</span></label>
+          <label><input type="radio" name="trend-metric" value="spo2"><span>SpO₂</span></label>
+          <label><input type="radio" name="trend-metric" value="temp"><span>Huidtemp.</span></label>
         </fieldset>
         <canvas id="trend-chart" class="trend-chart" role="img" aria-label="Trend over de afgelopen 30 dagen"></canvas>
         <p class="empty small" id="trend-empty" hidden>Nog niet genoeg gegevens voor deze grafiek.</p>
@@ -564,6 +568,21 @@
         </div>
       </form>
 
+      <div class="card" id="whoop-card">
+        <h2 class="card-title">WHOOP-account <span class="muted small">(officiële data)</span></h2>
+        <p class="muted small" id="whoop-status" aria-live="polite"></p>
+        <div class="field" id="whoop-proxy-field">
+          <label for="whoop-proxy">Adres van je WHOOP-proxy</label>
+          <input id="whoop-proxy" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://…/api/whoop" aria-describedby="whoop-help">
+          <p class="help" id="whoop-help">Op Netlify mag je dit leeg laten. Zie de README voor de gratis opzet in 10 minuten.</p>
+        </div>
+        <button class="btn btn-primary" type="button" id="btn-whoop-connect">Koppel met WHOOP</button>
+        <div class="actions-row">
+          <button class="btn btn-secondary" type="button" id="btn-whoop-sync" hidden>Nu bijwerken</button>
+          <button class="btn btn-secondary" type="button" id="btn-whoop-disconnect" hidden>Ontkoppelen</button>
+        </div>
+      </div>
+
       <div class="card">
         <h2 class="card-title">Over</h2>
         <p class="muted small">Alle gegevens worden alleen lokaal op dit toestel opgeslagen (IndexedDB). Er gaat niets naar een server.</p>
@@ -575,7 +594,7 @@
       <p class="disclaimer">Persoonlijk gebruik. Geen medisch advies.</p>
       <div class="card">
         <h2 class="card-title">Wat deze app niet kan</h2>
-        <p class="muted small">Via Bluetooth deelt de band alleen hartslag en RR-intervallen. ECG, bloeddruk, zuurstofsaturatie (SpO₂), huidtemperatuur, onregelmatig-hartritmemeldingen, stappen en 24/7-meting op de achtergrond zijn daarom niet mogelijk. Herstel, inspanning, stress, VO₂max en calorieën zijn eigen schattingen, niet de berekeningen van WHOOP.</p>
+        <p class="muted small">Via Bluetooth deelt de band alleen hartslag en RR-intervallen. ECG, bloeddruk, zuurstofsaturatie (SpO₂), huidtemperatuur, onregelmatig-hartritmemeldingen, stappen en 24/7-meting op de achtergrond zijn daarom niet live mogelijk. Koppel je WHOOP-account om SpO₂, huidtemperatuur en de officiële slaap- en herstelcijfers elke ochtend op te halen. Herstel, inspanning, stress, VO₂max en calorieën zijn eigen schattingen, niet de berekeningen van WHOOP.</p>
       </div>
       <p class="disclaimer muted small">Niet verbonden aan of goedgekeurd door WHOOP, Inc.</p>
     </section>

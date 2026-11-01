@@ -43,6 +43,48 @@ ECG, bloeddruk, SpO₂, huidtemperatuur, onregelmatig-hartritmemeldingen, stappe
 
 Safari ondersteunt geen Web Bluetooth. Een icoon op het iPhone-beginscherm opent in Safari, dus daar werken alleen demo en geschiedenis. Gebruik voor de live verbinding Bluefy. Let op: Safari en Bluefy hebben elk hun eigen opslag, dus metingen staan in de browser waarin je ze deed.
 
+## Officiële WHOOP-data ophalen (gratis)
+Met je WHOOP-account haalt de app elke ochtend je **officiële** slaap (fases, prestatie, consistentie, efficiëntie), herstel, HRV, rusthartslag, **SpO₂**, **huidtemperatuur**, ademfrequentie, inspanning, calorieën en trainingen op.
+- Je band hoeft dan 's nachts niet met deze app verbonden te zijn.
+- Officiële cijfers gaan voor eigen schattingen.
+- Werkt WHOOP niet, dan vallen Bluetooth-meting en nachtmeting terug op eigen schattingen.
+
+Daarvoor is een klein inlogstukje (proxy) nodig, omdat de geheime sleutel van WHOOP niet in een openbare website mag staan. De proxy bewaart niets. Alles is gratis.
+
+| Onderdeel | Gratis dienst | Limiet (ruim genoeg) |
+|---|---|---|
+| App | GitHub Pages of Netlify | onbeperkt voor persoonlijk gebruik |
+| Proxy | Netlify Functions **of** Cloudflare Workers | 125.000/maand resp. 100.000/dag |
+| WHOOP-API | developer.whoop.com | gratis bij je lidmaatschap |
+
+Per bijwerking zijn er ongeveer 6 verzoeken, en de app werkt automatisch hooguit eens per 15 minuten bij.
+
+### Stap 1: WHOOP-app registreren (5 min)
+1. Ga naar **developer.whoop.com** en log in met je WHOOP-account. Open het **Developer Dashboard** en maak een team en een app aan.
+2. Vink deze scopes aan: `read:recovery`, `read:cycles`, `read:sleep`, `read:workout`, `read:profile`, `read:body_measurement` (en offline-toegang als dat apart staat).
+3. Vul bij **Redirect URL** het callback-adres in (zie stap 2A of 2B). Bij privacybeleid mag je je app-adres invullen.
+4. Noteer **Client ID** en **Client Secret**.
+
+### Stap 2A: alles op Netlify (aanbevolen, één dienst)
+1. Ga naar app.netlify.com → **Add new site → Import an existing project** en kies deze GitHub-repo. Er is geen build-instelling nodig, `netlify.toml` regelt dat.
+2. Zet bij **Site configuration → Environment variables**:
+   - `WHOOP_CLIENT_ID`
+   - `WHOOP_CLIENT_SECRET`
+   - `APP_URL` = `https://<jouw-site>.netlify.app/`
+3. Gebruik als Redirect URL bij WHOOP: `https://<jouw-site>.netlify.app/api/whoop/callback`
+4. Deploy opnieuw. Open de app → **Instellingen → Koppel met WHOOP**. Het proxy-adres mag je leeg laten.
+
+### Stap 2B: GitHub Pages + Cloudflare Worker
+1. dash.cloudflare.com → **Workers & Pages → Create → Worker**. Plak de inhoud van `server/whoop-proxy.mjs` en klik op **Deploy**.
+2. Zet bij **Settings → Variables and Secrets**:
+   - `WHOOP_CLIENT_ID`
+   - `WHOOP_CLIENT_SECRET` (als *Secret*)
+   - `APP_URL` = `https://<gebruikersnaam>.github.io/<repo>/`
+3. Gebruik als Redirect URL bij WHOOP: `https://<worker>.<account>.workers.dev/api/whoop/callback`
+4. Vul in de app bij **Instellingen → Adres van je WHOOP-proxy** in: `https://<worker>.<account>.workers.dev/api/whoop`, en tik op **Koppel met WHOOP**.
+
+Tokens blijven alleen op je telefoon (localStorage). Ontkoppelen kan bij Instellingen.
+
 ## Op GitHub Pages zetten
 1. Push deze map naar een GitHub-repository (de bestanden staan in de root).
 2. Ga op GitHub naar **Settings → Pages**.
@@ -74,3 +116,6 @@ python3 -m http.server 8000
 | `js/chart.js` | Canvas-grafieken |
 | `sw.js`, `manifest.webmanifest`, `icons/` | PWA |
 | `assets/keepawake.mp4` | Stille video om een iPhone 's nachts wakker te houden |
+| `js/whoop-api.js` | Koppeling met de officiële WHOOP-API: inloggen, verversen, synchroniseren |
+| `server/whoop-proxy.mjs` | Stateless proxy (Cloudflare Worker of via Netlify) |
+| `netlify/functions/whoop.mjs`, `netlify.toml` | Netlify-opzet |

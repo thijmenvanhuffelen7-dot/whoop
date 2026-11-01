@@ -1,0 +1,4 @@
+# Geen build-stap: de map wordt zo gepubliceerd. De functie handelt alleen WHOOP-login en -data af.
+[build]
+  publish = "."
+  functions = "netlify/functions"

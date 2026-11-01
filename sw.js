@@ -1,5 +1,5 @@
 // Service worker: app-shell offline beschikbaar maken.
-const VERSION = 'whoop-v3'; // verhoog bij elke update
+const VERSION = 'whoop-v4'; // verhoog bij elke update
 const SHELL = [
   './',
   './index.html',
@@ -11,6 +11,7 @@ const SHELL = [
   './js/db.js',
   './js/chart.js',
   './js/metrics.js',
+  './js/whoop-api.js',
   './assets/keepawake.mp4',
   './manifest.webmanifest',
   './icons/icon.svg',
@@ -37,6 +38,8 @@ self.addEventListener('fetch', (e) => {
   if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
   // Video (bereikverzoeken) direct via het netwerk/de browsercache laten lopen
   if (req.headers.has('range') || req.url.endsWith('.mp4')) return;
+  // API-verzoeken nooit cachen
+  if (new URL(req.url).pathname.includes('/api/')) return;
   e.respondWith((async () => {
     const cache = await caches.open(VERSION);
     const cached = await cache.match(req, { ignoreSearch: true }) ||

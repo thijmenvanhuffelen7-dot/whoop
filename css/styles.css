@@ -312,7 +312,7 @@ fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
 .form .card-title:not(:first-child) { margin-top: 8px; }
 .field { display: flex; flex-direction: column; gap: 6px; }
 .field label, .field .label { font-size: 14px; font-weight: 600; }
-.field input[type="number"] {
+.field input[type="number"], .field input[type="url"] {
   min-height: 48px; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--border);
   background: var(--surface-2); font-size: 16px; font-variant-numeric: tabular-nums; width: 100%;
 }

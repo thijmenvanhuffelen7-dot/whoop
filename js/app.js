@@ -4,6 +4,7 @@ import { analyze, filterRR } from './hrv.js';
 import { db } from './db.js';
 import { LiveChart, drawSparkline, drawTrend, drawHypnogram } from './chart.js';
 import { simulatedStageAt } from './demo.js';
+import * as whoop from './whoop-api.js';
 import {
   mean, sd, median, clamp, dayKey, addDays, zoneIndex, ZONE_WEIGHT, strainFromTrimp, workload,
   kcalPerMinute, vo2max, stressScore, stressLabel, respiratoryRate, analyzeNight,
@@ -38,7 +39,7 @@ const noonOf = (key) => { const [y, m, d] = key.split('-').map(Number); return n
 const SETTINGS_KEY = 'whoop.settings';
 const defaults = {
   age: null, maxHr: null, restHr: null, sex: 'x', weight: null, height: null, sleepNeed: 8,
-  hrvDuration: 60, theme: 'dark', breathRate: 6, onboarded: false, iosHintDismissed: false,
+  hrvDuration: 60, theme: 'dark', breathRate: 6, onboarded: false, iosHintDismissed: false, whoopProxy: '',
 };
 const settings = (() => {
   try { return { ...defaults, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') }; }
@@ -211,7 +212,7 @@ function onData(d) {
   if (valid) {
     state.hr = d.hr;
     state.hrHist.push({ t, hr: d.hr });
-    liveChart.push(t, d.hr);
+    if (!night.running) liveChart.push(t, d.hr);
   }
   state.contact = d.contact;
   if (d.rrPresent && d.rr.length) state.rrSeen = true;
@@ -237,6 +238,7 @@ function onData(d) {
     state.recording.rr.push(...d.rr);
   }
   listeners.forEach((fn) => fn(d));
+  if (night.running) return; // nachtmodus: scherm is zwart, niets tekenen (bespaart batterij)
   renderLive();
   if (!beatTimer) scheduleBeat();
 }
@@ -283,12 +285,16 @@ let journalMap = new Map();
 function buildIndex(recs) {
   const primary = new Map(), sleep = new Map(), nights = new Map();
   const sorted = [...recs].sort((a, b) => a.date - b.date);
+  const official = (r) => (r.source === 'whoop' ? 1 : 0);
   for (const r of sorted) {
-    if (r.type !== 'night') continue;
+    if (r.type !== 'night' || r.nap) continue;
     const k = dayKey(r.date + r.duration * 1000);
-    // Per dag telt de hoofdslaap (langste nacht), zodat een handmatige invoer niet dubbel telt
-    if (!nights.has(k) || sleepHoursOf(r) > sleepHoursOf(nights.get(k))) { nights.set(k, r); sleep.set(k, sleepHoursOf(r)); }
-    if (r.rmssd) primary.set(k, { kind: 'night', rmssd: r.rmssd, rhr: r.minHr, resp: r.respRate, rec: r });
+    // Per dag telt de hoofdslaap: WHOOP-data eerst, anders de langste nacht (handmatig telt niet dubbel)
+    const cur = nights.get(k);
+    if (!cur || official(r) - official(cur) > 0 || (official(r) === official(cur) && sleepHoursOf(r) > sleepHoursOf(cur))) { nights.set(k, r); sleep.set(k, sleepHoursOf(r)); }
+    if (r.rmssd && (!primary.has(k) || official(r) >= official(primary.get(k).rec))) {
+      primary.set(k, { kind: 'night', rmssd: r.rmssd, rhr: r.minHr, resp: r.respRate, rec: r });
+    }
   }
   for (const r of sorted) {
     if (r.type === 'hrv' && r.rmssd) {
@@ -305,6 +311,7 @@ const sleepHoursOf = (r) => (r.sleepHours != null ? r.sleepHours : r.duration / 
 function recoveryFor(key) {
   const p = index.primary.get(key);
   if (!p) return null;
+  if (p.rec.source === 'whoop' && p.rec.recoveryScore != null) return { score: Math.round(p.rec.recoveryScore), primary: p, official: true };
   const baseline = [];
   for (let i = 1; i <= 30; i++) {
     const q = index.primary.get(addDays(key, -i));
@@ -342,8 +349,19 @@ async function refreshData() {
 
 const strainOf = (key) => {
   const d = key === day?.date ? day : daysMap.get(key);
-  return d ? strainFromTrimp(d.trimp) : null;
+  if (!d) return null;
+  return d.whoopStrain != null ? d.whoopStrain : strainFromTrimp(d.trimp || 0);
 };
+const kcalOf = (d) => (d ? (d.whoopKcal != null ? d.whoopKcal : d.kcal) : null);
+
+/** Velden toevoegen aan een dag (bv. uit WHOOP), ook in het geheugen als het vandaag is. */
+async function mergeDay(key, fields) {
+  let rec = key === day?.date ? day : await db.getIn('days', key).catch(() => null);
+  rec = rec || emptyDay(key);
+  Object.assign(rec, fields);
+  if (key === day?.date) Object.assign(day, fields);
+  await db.putIn('days', { ...rec, zoneSec: [...rec.zoneSec] });
+}
 
 /* ============================================================
    Vandaag
@@ -382,7 +400,7 @@ async function renderToday() {
     const color = rec.score >= 67 ? 'var(--zone-2)' : rec.score >= 34 ? 'var(--zone-3)' : 'var(--zone-5)';
     recEl.style.setProperty('--rec-color', color);
     $('#rec-val').textContent = `${rec.score}%`;
-    $('#rec-sub').textContent = rec.primary.kind === 'night' ? 'uit nachtmeting' : 'uit ochtendmeting';
+    $('#rec-sub').textContent = rec.official ? 'van WHOOP' : rec.primary.kind === 'night' ? 'uit nachtmeting' : 'uit ochtendmeting';
     setScoreRing('#ring-recovery', rec.score / 100);
     recEl.setAttribute('aria-label', `Herstel ${rec.score} procent`);
   }
@@ -396,7 +414,8 @@ async function renderToday() {
   // Slaap
   const hours = index.sleep.get(key);
   const needLast = index.nights.get(key)?.need || settings.sleepNeed;
-  const perf = hours ? Math.min(100, Math.round((hours / needLast) * 100)) : null;
+  const officialPerf = index.nights.get(key)?.performance;
+  const perf = officialPerf != null ? Math.round(officialPerf) : hours ? Math.min(100, Math.round((hours / needLast) * 100)) : null;
   $('#sleep-val').textContent = hours ? hmm(hours) : '–';
   $('#sleep-sub').textContent = hours ? `prestatie ${perf}%` : 'geen nachtmeting';
   setScoreRing('#ring-sleep', hours ? hours / needLast : 0);
@@ -422,7 +441,12 @@ async function renderToday() {
   const stressAvg = d && d.stressSec > 60 ? d.stressSum / d.stressSec : null;
   $('#t-stress').textContent = fmt1(stressAvg);
   $('#t-stress-l').textContent = stressAvg != null ? stressLabel(stressAvg).toLowerCase() : '';
-  $('#t-kcal').textContent = d && d.kcal ? fmt0(d.kcal) : '–';
+  $('#t-kcal').textContent = kcalOf(d) ? fmt0(kcalOf(d)) : '–';
+  const nrec = index.nights.get(key);
+  $('#t-spo2-tile').hidden = nrec?.spo2 == null;
+  $('#t-temp-tile').hidden = nrec?.skinTemp == null;
+  $('#t-spo2').textContent = fmt1(nrec?.spo2);
+  $('#t-temp').textContent = fmt1(nrec?.skinTemp);
   $('#t-rhr').textContent = fmt0(rec?.primary.rhr);
   $('#t-hrv').textContent = fmt0(rec?.primary.rmssd);
   $('#t-resp').textContent = fmt1(rec?.primary.resp);
@@ -464,6 +488,7 @@ function renderLastNight(key) {
   const r = index.nights.get(key);
   if (!r) { card.hidden = true; return; }
   card.hidden = false;
+  card.href = r.source === 'whoop' ? '#trends' : '#measure/night';
   $('#ln-times').textContent = `${fmtClock.format(new Date(r.date))} – ${fmtClock.format(new Date(r.date + r.duration * 1000))}`;
   const bar = $('#ln-bar'); bar.innerHTML = '';
   const legend = $('#ln-legend');
@@ -483,7 +508,9 @@ function renderLastNight(key) {
     bar.hidden = true; legend.hidden = true;
     parts.push(r.manual ? 'Handmatig ingevoerd, geen fases' : 'Geen fases beschikbaar');
   }
-  if (cons != null) parts.push(`consistentie ${cons}%`);
+  const consShown = r.consistency != null ? Math.round(r.consistency) : cons;
+  if (consShown != null) parts.push(`consistentie ${consShown}%`);
+  if (r.source === 'whoop') parts.push('bron: WHOOP');
   $('#ln-text').textContent = parts.join(' · ') + '.';
 }
 
@@ -573,8 +600,8 @@ function renderLive() {
     $('#live-kcal').textContent = fmt0(w.kcal);
     $('#record-info').textContent = `Training loopt · ${mmss((Date.now() - state.recording.start) / 1000)} · inspanning en kcal van deze training`;
   } else {
-    $('#live-strain').textContent = day ? fmt1(strainFromTrimp(day.trimp)) : '–';
-    $('#live-kcal').textContent = day && day.kcal ? fmt0(day.kcal) : '–';
+    $('#live-strain').textContent = day ? fmt1(strainOf(day.date)) : '–';
+    $('#live-kcal').textContent = kcalOf(day) ? fmt0(kcalOf(day)) : '–';
   }
 
   if (hr && connected && Date.now() - lastAnnounce > 30000) {
@@ -1053,6 +1080,8 @@ const METRICS = {
   strain: { title: 'Inspanning', unit: '', get: (k) => strainOf(k) || null },
   sleep: { title: 'Slaap', unit: 'u', get: (k) => index.sleep.get(k) },
   resp: { title: 'Ademfrequentie', unit: '/min', get: (k) => index.primary.get(k)?.resp },
+  spo2: { title: 'Zuurstof (SpO₂)', unit: '%', get: (k) => index.nights.get(k)?.spo2 },
+  temp: { title: 'Huidtemperatuur', unit: '°C', get: (k) => index.nights.get(k)?.skinTemp },
 };
 
 function series(metric, days = 30) {
@@ -1134,7 +1163,9 @@ function renderMonitor() {
     ['rhr', 'Rusthartslag', 'bpm', 0],
     ['hrv', 'HRV (RMSSD)', 'ms', 0],
     ['resp', 'Ademfrequentie', '/min', 1],
-  ];
+    ['spo2', 'Zuurstof (SpO₂)', '%', 1],
+    ['temp', 'Huidtemperatuur', '°C', 1],
+  ].filter(([k]) => k !== 'spo2' && k !== 'temp' || series(k).length);
   for (const [k, name, unit, dec] of items) {
     let latest = null, latestKey = null;
     for (let i = 0; i < 3 && latest == null; i++) { const kk = addDays(today, -i); const v = METRICS[k].get(kk); if (v != null) { latest = v; latestKey = kk; } }
@@ -1222,7 +1253,8 @@ function historyItem(r) {
   else if (r.type === 'breath') metrics = `${rateText(r.rate)}/min · gem. ${fmt0(r.meanHr)} bpm${r.rmssd ? ` · RMSSD ${fmt0(r.rmssd)} ms` : ''}`;
   else if (r.type === 'night') metrics = r.manual ? `${hmm(sleepHoursOf(r))} u slaap · handmatig` : `${hmm(sleepHoursOf(r))} u slaap${r.deepMin != null ? ` · diep ${hmm(r.deepMin / 60)} · REM ${hmm(r.remMin / 60)}` : ''} · HRV ${fmt0(r.rmssd)} ms`;
   else metrics = `inspanning ${fmt1(r.strain)} · gem. ${fmt0(r.meanHr)} bpm · ${fmt0(r.kcal)} kcal`;
-  const title = r.type === 'session' && r.activity ? `${TITLES.session} · ${r.activity}` : TITLES[r.type] || 'Sessie';
+  let title = r.type === 'session' && r.activity ? `${TITLES.session} · ${r.activity}` : TITLES[r.type] || 'Sessie';
+  if (r.source === 'whoop') title = (r.type === 'night' ? (r.nap ? 'Dutje' : 'Slaap') : title) + ' · WHOOP';
   const date = fmtDate.format(new Date(r.date));
   li.innerHTML = `
     <div class="history-icon">${ICONS[r.type] || ICONS.session}</div>
@@ -1232,6 +1264,7 @@ function historyItem(r) {
       <button type="button" data-act="del">${ICONS.trash}</button>
     </div>`;
   $('.history-title', li).textContent = title + (r.demo ? ' (demo)' : '');
+  if (r.source === 'whoop') $('[data-act="csv"]', li).hidden = true;
   $('.history-meta', li).textContent = `${date} · ${durText(r.duration)}`;
   $('.history-metrics', li).textContent = metrics;
   const csvBtn = $('[data-act="csv"]', li);
@@ -1400,8 +1433,63 @@ async function generateSampleData() {
 }
 
 /* ============================================================
+   WHOOP-account
+   ============================================================ */
+let syncing = false;
+function renderWhoopCard() {
+  const connected = whoop.isConnected();
+  $('#whoop-proxy').value = settings.whoopProxy || '';
+  $('#whoop-proxy-field').hidden = connected;
+  $('#btn-whoop-connect').hidden = connected;
+  $('#btn-whoop-sync').hidden = !connected;
+  $('#btn-whoop-disconnect').hidden = !connected;
+  const ls = whoop.lastSync();
+  $('#whoop-status').textContent = connected
+    ? `Gekoppeld${ls ? ` · laatst bijgewerkt ${fmtDate.format(new Date(ls))}` : ' · nog niet bijgewerkt'}`
+    : 'Niet gekoppeld. Haal elke ochtend je officiële slaap, herstel, HRV, SpO₂, huidtemperatuur, inspanning en trainingen op.';
+}
+
+async function whoopSync(manual = false) {
+  if (syncing || !whoop.isConnected() || !navigator.onLine) return;
+  syncing = true;
+  $('#btn-whoop-sync').disabled = true;
+  $('#btn-whoop-sync').textContent = 'Bezig met bijwerken…';
+  try {
+    const res = await whoop.sync(settings, { mergeDay });
+    if (res.body) {
+      let changed = false;
+      if (!settings.maxHr && res.body.maxHr) { settings.maxHr = res.body.maxHr; changed = true; }
+      if (!settings.weight && res.body.weight) { settings.weight = Math.round(res.body.weight * 10) / 10; changed = true; }
+      if (!settings.height && res.body.height) { settings.height = res.body.height; changed = true; }
+      if (changed) { saveSettings(); initSettingsValues(); }
+    }
+    if (manual) toast(`Bijgewerkt: ${res.nights} nachten, ${res.workouts} trainingen, ${res.days} dagen.`);
+    if (currentTab === 'today') renderToday();
+    if (currentTab === 'trends') renderTrends();
+  } catch (e) {
+    if (e.code === 'AUTH') { toast('Je WHOOP-koppeling is verlopen. Koppel opnieuw bij Instellingen.'); }
+    else if (manual) toast(e.message || 'Bijwerken mislukt.');
+  } finally {
+    syncing = false;
+    $('#btn-whoop-sync').disabled = false;
+    $('#btn-whoop-sync').textContent = 'Nu bijwerken';
+    renderWhoopCard();
+  }
+}
+/** Automatisch bijwerken bij openen, maximaal eens per 15 minuten (spaart verzoeken en batterij). */
+function maybeAutoSync() {
+  const ls = whoop.lastSync();
+  if (whoop.isConnected() && (!ls || Date.now() - ls > 15 * 60000)) whoopSync(false);
+}
+
+/* ============================================================
    Instellingen-scherm
    ============================================================ */
+function initSettingsValues() {
+  const form = $('#settings-form');
+  for (const k of ['age', 'maxHr', 'restHr', 'weight', 'height']) form[k].value = settings[k] ?? '';
+  updateMaxHelp();
+}
 function initSettings() {
   const form = $('#settings-form');
   for (const k of ['age', 'maxHr', 'restHr', 'weight', 'height']) form[k].value = settings[k] ?? '';
@@ -1515,6 +1603,7 @@ document.addEventListener('visibilitychange', async () => {
     if (wakeCount && 'wakeLock' in navigator) { try { wakeLock = await navigator.wakeLock.request('screen'); } catch {} }
     if (state.status === 'lost' && state.source?.retry) state.source.retry().catch(onSourceError);
     if (currentTab === 'today') renderToday();
+    maybeAutoSync();
   }
 });
 
@@ -1539,7 +1628,7 @@ function route() {
   if (tab === 'live') { liveChart.start(); requestAnimationFrame(() => liveChart.draw()); } else liveChart.stop();
   if (tab === 'today') renderToday();
   if (tab === 'trends') renderTrends();
-  if (tab === 'settings') updateSampleButton();
+  if (tab === 'settings') { updateSampleButton(); renderWhoopCard(); }
   if (changed) window.scrollTo(0, 0);
 }
 
@@ -1607,6 +1696,16 @@ async function init() {
   });
 
   initSettings();
+  $('#btn-whoop-connect').addEventListener('click', () => {
+    const v = $('#whoop-proxy').value.trim();
+    if (v && !/^(https:\/\/|http:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/)\S+$/.test(v)) { toast('Het proxy-adres moet met https:// beginnen.'); return; }
+    settings.whoopProxy = v; saveSettings();
+    try { whoop.startLogin(settings); } catch (e) { toast(e.message); }
+  });
+  $('#btn-whoop-sync').addEventListener('click', () => whoopSync(true));
+  $('#btn-whoop-disconnect').addEventListener('click', async () => {
+    if (await confirmDialog('WHOOP ontkoppelen?', 'De app haalt geen nieuwe gegevens meer op. Al opgehaalde gegevens blijven bewaard.', 'Ontkoppelen')) { whoop.disconnect(); renderWhoopCard(); }
+  });
   $('#btn-onboarding').addEventListener('click', openOnboarding);
   $('#btn-sample').addEventListener('click', toggleSampleData);
   $('#ob-next').addEventListener('click', () => { if (obStep < OB_STEPS.length - 1) { obStep++; renderOb(); } else closeOnboarding(); });
@@ -1615,9 +1714,13 @@ async function init() {
 
   window.addEventListener('hashchange', route);
   window.addEventListener('resize', () => { liveChart.draw(); if (currentTab === 'trends') renderTrends(); });
+  const login = whoop.handleRedirect();
   await refreshData();
   currentTab = null;
   route();
+  if (login === 'ok') { toast('WHOOP gekoppeld. Gegevens worden opgehaald…'); whoopSync(true); }
+  else if (login) toast(login);
+  else maybeAutoSync();
   onStatus({ status: 'idle' });
   if (!settings.onboarded) openOnboarding();
   else if (loadNightProgress()) toast('Er is een onderbroken nachtmeting. Zie Meten → Nacht.');
