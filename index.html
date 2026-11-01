@@ -79,6 +79,13 @@
         </a>
       </div>
 
+      <a class="card card-link" id="lastnight-card" href="#measure/night" hidden>
+        <div class="card-head"><h2 class="card-title">Afgelopen nacht</h2><span class="muted small" id="ln-times"></span></div>
+        <div class="stage-bar" id="ln-bar" role="img"></div>
+        <ul class="stage-legend" id="ln-legend"></ul>
+        <p class="muted small" id="ln-text"></p>
+      </a>
+
       <div class="card" id="target-card">
         <div class="card-head"><h2 class="card-title">Inspanningsdoel</h2><span class="muted small" id="target-range"></span></div>
         <div class="target-bar" aria-hidden="true"><span class="target-zone" id="target-zone"></span><span class="target-now" id="target-now"></span></div>
@@ -359,32 +366,69 @@
       </div>
 
       <div class="panel" id="panel-night" hidden>
+        <div class="notice notice-warn" id="night-resume" hidden>
+          <h2>Onderbroken nachtmeting gevonden</h2>
+          <p id="night-resume-text"></p>
+          <div class="actions-row">
+            <button class="btn btn-primary" type="button" id="btn-resume-save">Opslaan</button>
+            <button class="btn btn-secondary" type="button" id="btn-resume-continue">Doorgaan</button>
+          </div>
+          <button class="btn btn-ghost" type="button" id="btn-resume-discard">Weggooien</button>
+        </div>
+
         <div id="night-intro">
           <div class="card">
             <h2 class="card-title">Nachtmeting</h2>
-            <p>Meet je hartslag, HRV en ademfrequentie terwijl je slaapt. Daarmee worden je slaap en herstel nauwkeuriger.</p>
+            <p>Meet je slaap via hartslag en HRV: inslaaptijd, slaapfases (licht, diep, REM), wakker-momenten, nachtelijke HRV en ademfrequentie.</p>
             <ul class="checklist">
               <li>Leg je telefoon aan de oplader, dicht bij je bed</li>
-              <li>Laat deze pagina open en zet automatische vergrendeling uit</li>
-              <li>Houd je band verbonden (de app verbindt zelf opnieuw)</li>
+              <li>Laat deze pagina open. Het scherm wordt zwart, maar blijft aan.</li>
+              <li>iPhone: zet <strong>Instellingen → Scherm en helderheid → Automatische vergrendeling</strong> op <strong>Nooit</strong></li>
+              <li>Valt de verbinding even weg, dan verbindt de app zelf opnieuw. Je meting wordt elke minuut tussentijds bewaard.</li>
             </ul>
           </div>
           <button class="btn btn-primary btn-lg" type="button" id="btn-night-start">Start nachtmeting</button>
           <p class="muted small center" id="night-hint"></p>
+
+          <details class="card manual">
+            <summary>Geen nachtmeting gedaan? Voer je slaap handmatig in</summary>
+            <form id="manual-sleep" class="form">
+              <div class="field-row">
+                <div class="field"><label for="ms-bed">Naar bed</label><input id="ms-bed" type="time" value="23:00" required></div>
+                <div class="field"><label for="ms-wake">Opgestaan</label><input id="ms-wake" type="time" value="07:00" required></div>
+              </div>
+              <div class="field">
+                <label for="ms-latency">Ongeveer hoe lang wakker gelegen? (minuten)</label>
+                <input id="ms-latency" type="number" inputmode="numeric" min="0" max="300" value="15">
+              </div>
+              <button class="btn btn-secondary" type="submit">Slaap opslaan</button>
+              <p class="muted small">Telt mee voor slaap en slaapbehoefte. Herstel en fases hebben een nachtmeting nodig.</p>
+            </form>
+          </details>
         </div>
+
         <div id="night-result" hidden>
           <div class="card result-card">
             <span class="muted small" id="night-date"></span>
-            <div class="result-main"><span class="result-big" id="night-dur">–</span><span class="result-unit">in bed</span></div>
+            <div class="result-main"><span class="result-big" id="night-sleep">–</span><span class="result-unit">geslapen</span></div>
             <p class="compare" id="night-text"></p>
           </div>
+          <div class="card" id="night-stages-card">
+            <div class="card-head"><h2 class="card-title">Slaapfases</h2><span class="muted small">schatting</span></div>
+            <canvas id="hypnogram" class="hypnogram" role="img" aria-label="Slaapfases tijdens de nacht"></canvas>
+            <ul class="stage-legend" id="night-stage-legend"></ul>
+          </div>
           <div class="stat-grid stat-grid-2">
+            <div class="stat"><span class="stat-label">Slaapprestatie</span><span class="stat-value" id="night-perf">–</span></div>
+            <div class="stat"><span class="stat-label">Efficiëntie</span><span class="stat-value" id="night-eff">–</span></div>
+            <div class="stat"><span class="stat-label">In slaap gevallen na</span><span class="stat-value"><span id="night-lat">–</span><small>min</small></span></div>
+            <div class="stat"><span class="stat-label">Wakker geworden</span><span class="stat-value"><span id="night-awk">–</span><small>×</small></span></div>
             <div class="stat"><span class="stat-label">Laagste hartslag</span><span class="stat-value"><span id="night-min">–</span><small>bpm</small></span></div>
             <div class="stat"><span class="stat-label">HRV (RMSSD)</span><span class="stat-value"><span id="night-rmssd">–</span><small>ms</small></span></div>
             <div class="stat"><span class="stat-label">Ademfrequentie</span><span class="stat-value"><span id="night-resp">–</span><small>/min</small></span></div>
             <div class="stat"><span class="stat-label">Herstel</span><span class="stat-value" id="night-rec">–</span></div>
           </div>
-          <canvas id="night-chart" class="trend-chart" role="img" aria-label="Hartslag tijdens de nacht"></canvas>
+          <p class="muted small center" id="night-gaps"></p>
           <button class="btn btn-primary btn-lg" type="button" id="btn-night-done">Klaar</button>
         </div>
       </div>
@@ -566,6 +610,7 @@
     <span class="night-clock" id="night-clock">00:00</span>
     <span class="night-info"><span id="night-elapsed">0:00</span> · <span id="night-hr">--</span> bpm</span>
     <span class="night-status" id="night-status"></span>
+    <span class="night-status" id="night-saved"></span>
     <button class="btn btn-night" type="button" id="btn-night-stop">Ik ben wakker · stop meting</button>
   </div>
 

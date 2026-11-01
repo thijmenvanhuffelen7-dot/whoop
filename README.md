@@ -11,7 +11,10 @@ Plain HTML/CSS/JS, geen build-stap. Alle gegevens blijven lokaal (IndexedDB).
 - **Meten**
   - *HRV*: begeleide meting van 1 of 3 min met RMSSD, ln(RMSSD), SDNN, hartslag en ademfrequentie. Artefactfilter en vergelijking met je 7-daagse gemiddelde.
   - *Ademhaling*: ademhalingsbegeleider (4–10/min) met live hartslag en een samenvatting.
-  - *Nacht*: meet de hele nacht, met tijd in bed, laagste hartslag, nachtelijke HRV, ademfrequentie en herstel.
+  - *Nacht*: slaapmeting met slaapfases (wakker/licht/diep/REM, hypnogram), inslaaptijd, efficiëntie, wakker-momenten, slaapcycli, slaapprestatie, laagste hartslag, nachtelijke HRV, ademfrequentie en herstel.
+    - Houdt een iPhone wakker met een stille video-loop als Wake Lock ontbreekt.
+    - Bewaart elke minuut tussentijds. Een onderbroken nacht (herladen, crash) kun je opslaan of hervatten.
+    - Geen nachtmeting gedaan? Dan kun je je slaap handmatig invoeren.
 - **Trends**: grafieken over 30 dagen (herstel, HRV, rusthartslag, inspanning, slaap, ademhaling), een weekrapport, een gezondheidsmonitor t.o.v. je eigen basis, dagboekinzichten, geschiedenis en CSV-export (metingen en dagen).
 - **Instellingen**: zones (leeftijd, max- en rusthartslag), lichaam (voor kcal), slaapbehoefte, meetduur, thema en voorbeelddata.
 - **Demo-modus** en **voorbeelddata van 3 weken**, zodat je alles zonder band kunt bekijken.
@@ -25,10 +28,12 @@ Plain HTML/CSS/JS, geen build-stap. Alle gegevens blijven lokaal (IndexedDB).
 | Calorieën | Keytel e.a. (2005) bij inspanning, anders Mifflin-St Jeor |
 | VO₂max | Uth–Sørensen: 15,3 × max. hartslag / rusthartslag |
 | Ademfrequentie | Spectrale piek (0,1–0,5 Hz) van de respiratoire sinusaritmie in RR-intervallen |
+| Slaapfases | Per minuut: hartslag, RMSSD (5 min) en hartslag-instabiliteit, genormaliseerd t.o.v. je eigen nacht. Diep = lage, stabiele hartslag met hoge HRV. REM = hogere, wisselende hartslag met lage HRV. Wakker = duidelijke piek. Inslapen = eerste 10 rustige minuten. Daarna gladgestreken. |
+| Slaapprestatie / consistentie | Geslapen uren ÷ slaapbehoefte; spreiding van bed- en opsta-tijden (7 dagen) |
 | Stress | Hartslag boven rust en daling van de live-RMSSD t.o.v. je basis, schaal 0–3 |
 
 ### Niet mogelijk via Web Bluetooth
-ECG, bloeddruk, SpO₂, huidtemperatuur, onregelmatig-hartritmemeldingen, stappen en 24/7-meting op de achtergrond. De band deelt via Bluetooth alleen hartslag en RR-intervallen, en een webpagina kan niet op de achtergrond blijven meten.
+ECG, bloeddruk, SpO₂, huidtemperatuur, onregelmatig-hartritmemeldingen, stappen en 24/7-meting op de achtergrond. De band deelt via Bluetooth alleen hartslag en RR-intervallen, en een webpagina kan niet op de achtergrond blijven meten. Voor slaap moet de pagina daarom open blijven (scherm zwart, telefoon aan de oplader). De slaapfases zijn een schatting zonder bewegingsdata en geen slaaplab.
 
 ## Voorbereiding van de band
 1. Open de officiële WHOOP-app en zet **Hartslag uitzenden** (Heart Rate Broadcast) aan.
@@ -68,3 +73,4 @@ python3 -m http.server 8000
 | `js/db.js` | IndexedDB |
 | `js/chart.js` | Canvas-grafieken |
 | `sw.js`, `manifest.webmanifest`, `icons/` | PWA |
+| `assets/keepawake.mp4` | Stille video om een iPhone 's nachts wakker te houden |

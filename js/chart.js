@@ -198,3 +198,50 @@ function hexA(hex, a) {
   const n = parseInt(m[1], 16);
   return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`;
 }
+
+/** Hypnogram: fases per minuut (0 wakker, 1 licht, 2 diep, 3 REM, -1 geen data). */
+export function drawHypnogram(canvas, stages, startTime) {
+  const { ctx, w, h } = setup(canvas);
+  if (!stages.length) return;
+  const rows = [0, 3, 1, 2]; // van boven naar beneden: wakker, REM, licht, diep
+  const labels = ['Wakker', 'REM', 'Licht', 'Diep'];
+  const colors = { 0: css('--st-wake'), 1: css('--st-light'), 2: css('--st-deep'), 3: css('--st-rem') };
+  const padL = 52, padR = 6, padT = 6, padB = 22;
+  const rowH = (h - padT - padB) / 4;
+  const x = (i) => padL + (i / stages.length) * (w - padL - padR);
+  ctx.font = '11px ' + css('--font');
+  ctx.fillStyle = css('--muted');
+  ctx.strokeStyle = css('--grid');
+  rows.forEach((s, r) => {
+    const y = padT + r * rowH;
+    ctx.fillText(labels[r], 0, y + rowH / 2 + 4);
+    ctx.beginPath(); ctx.moveTo(padL, Math.round(y + rowH) + 0.5); ctx.lineTo(w - padR, Math.round(y + rowH) + 0.5); ctx.stroke();
+  });
+  // Blokken per aaneengesloten fase
+  let i = 0;
+  while (i < stages.length) {
+    const s = stages[i];
+    let j = i;
+    while (j < stages.length && stages[j] === s) j++;
+    if (s >= 0) {
+      const r = rows.indexOf(s);
+      ctx.fillStyle = colors[s];
+      const y = padT + r * rowH + rowH * 0.18;
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(x(i), y, Math.max(1.5, x(j) - x(i)), rowH * 0.64, 3); else ctx.rect(x(i), y, Math.max(1.5, x(j) - x(i)), rowH * 0.64);
+      ctx.fill();
+    }
+    i = j;
+  }
+  // Tijdlabels
+  ctx.fillStyle = css('--muted');
+  const fmt = new Intl.DateTimeFormat('nl-NL', { hour: '2-digit', minute: '2-digit' });
+  const ticks = 4;
+  for (let k = 0; k <= ticks; k++) {
+    const idx = Math.round((k / ticks) * stages.length);
+    const label = fmt.format(new Date(startTime + idx * 60000));
+    const tw = ctx.measureText(label).width;
+    ctx.fillText(label, clampX(x(idx) - tw / 2, padL, w - padR - tw), h - 6);
+  }
+}
+function clampX(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }

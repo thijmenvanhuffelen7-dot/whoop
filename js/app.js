@@ -2,11 +2,12 @@ import { BleSource } from './ble.js';
 import { DemoSource } from './demo.js';
 import { analyze, filterRR } from './hrv.js';
 import { db } from './db.js';
-import { LiveChart, drawSparkline, drawTrend } from './chart.js';
+import { LiveChart, drawSparkline, drawTrend, drawHypnogram } from './chart.js';
+import { simulatedStageAt } from './demo.js';
 import {
   mean, sd, median, clamp, dayKey, addDays, zoneIndex, ZONE_WEIGHT, strainFromTrimp, workload,
   kcalPerMinute, vo2max, stressScore, stressLabel, respiratoryRate, analyzeNight,
-  recoveryScore, strainTarget, sleepNeed,
+  recoveryScore, strainTarget, sleepNeed, sleepStages, encodeStages, decodeStages, STAGE_NAMES, sleepConsistency,
 } from './metrics.js';
 
 /* ============================================================
@@ -280,14 +281,14 @@ let journalMap = new Map();
 
 /** Primaire meting per dag: nachtmeting (op de dag van ontwaken), anders eerste HRV-meting. */
 function buildIndex(recs) {
-  const primary = new Map(), sleep = new Map();
+  const primary = new Map(), sleep = new Map(), nights = new Map();
   const sorted = [...recs].sort((a, b) => a.date - b.date);
   for (const r of sorted) {
-    if (r.type === 'night' && r.rmssd) {
-      const k = dayKey(r.date + r.duration * 1000);
-      primary.set(k, { kind: 'night', rmssd: r.rmssd, rhr: r.minHr, resp: r.respRate, rec: r });
-      sleep.set(k, (sleep.get(k) || 0) + r.duration / 3600);
-    }
+    if (r.type !== 'night') continue;
+    const k = dayKey(r.date + r.duration * 1000);
+    // Per dag telt de hoofdslaap (langste nacht), zodat een handmatige invoer niet dubbel telt
+    if (!nights.has(k) || sleepHoursOf(r) > sleepHoursOf(nights.get(k))) { nights.set(k, r); sleep.set(k, sleepHoursOf(r)); }
+    if (r.rmssd) primary.set(k, { kind: 'night', rmssd: r.rmssd, rhr: r.minHr, resp: r.respRate, rec: r });
   }
   for (const r of sorted) {
     if (r.type === 'hrv' && r.rmssd) {
@@ -295,9 +296,11 @@ function buildIndex(recs) {
       if (!primary.has(k)) primary.set(k, { kind: 'hrv', rmssd: r.rmssd, rhr: r.meanHr, resp: r.respRate, rec: r });
     }
   }
-  return { primary, sleep };
+  return { primary, sleep, nights };
 }
-let index = { primary: new Map(), sleep: new Map() };
+let index = { primary: new Map(), sleep: new Map(), nights: new Map() };
+/** Werkelijke slaap (zonder wakker liggen), of tijd in bed bij oudere metingen. */
+const sleepHoursOf = (r) => (r.sleepHours != null ? r.sleepHours : r.duration / 3600);
 
 function recoveryFor(key) {
   const p = index.primary.get(key);
@@ -392,11 +395,13 @@ async function renderToday() {
 
   // Slaap
   const hours = index.sleep.get(key);
-  const needLast = settings.sleepNeed;
+  const needLast = index.nights.get(key)?.need || settings.sleepNeed;
+  const perf = hours ? Math.min(100, Math.round((hours / needLast) * 100)) : null;
   $('#sleep-val').textContent = hours ? hmm(hours) : '–';
-  $('#sleep-sub').textContent = hours ? `${nf0.format((hours / needLast) * 100)}% van behoefte` : 'geen nachtmeting';
+  $('#sleep-sub').textContent = hours ? `prestatie ${perf}%` : 'geen nachtmeting';
   setScoreRing('#ring-sleep', hours ? hours / needLast : 0);
-  $('#score-sleep').setAttribute('aria-label', hours ? `Slaap ${hmm(hours)} uur` : 'Slaap: geen nachtmeting');
+  $('#score-sleep').setAttribute('aria-label', hours ? `Slaap ${hmm(hours)} uur, slaapprestatie ${perf} procent` : 'Slaap: geen nachtmeting');
+  renderLastNight(key);
 
   // Inspanningsdoel
   const target = strainTarget(rec?.score);
@@ -438,6 +443,48 @@ async function renderToday() {
   $('#need-text').textContent = `${parts.join(' · ')}. Wil je om 7:00 op? Ga dan rond ${fmtClock.format(bed)} naar bed.`;
 
   renderJournal(key);
+}
+
+function stageLegend(ul, rec) {
+  ul.innerHTML = '';
+  const vals = [rec.wakeMin, rec.lightMin, rec.deepMin, rec.remMin];
+  const vars = ['--st-wake', '--st-light', '--st-deep', '--st-rem'];
+  const total = vals.reduce((a, b) => a + (b || 0), 0) || 1;
+  [2, 3, 1, 0].forEach((i) => {
+    const li = document.createElement('li');
+    li.innerHTML = `<i style="background:var(${vars[i]})"></i><span></span><strong></strong>`;
+    $('span', li).textContent = STAGE_NAMES[i];
+    $('strong', li).textContent = `${hmm((vals[i] || 0) / 60)} · ${nf0.format(((vals[i] || 0) / total) * 100)}%`;
+    ul.append(li);
+  });
+}
+
+function renderLastNight(key) {
+  const card = $('#lastnight-card');
+  const r = index.nights.get(key);
+  if (!r) { card.hidden = true; return; }
+  card.hidden = false;
+  $('#ln-times').textContent = `${fmtClock.format(new Date(r.date))} – ${fmtClock.format(new Date(r.date + r.duration * 1000))}`;
+  const bar = $('#ln-bar'); bar.innerHTML = '';
+  const legend = $('#ln-legend');
+  const recent = [...index.nights.values()].filter((n) => n.date > Date.now() - 8 * 86400000).map((n) => ({ start: n.date, end: n.date + n.duration * 1000 }));
+  const cons = sleepConsistency(recent);
+  const parts = [];
+  if (r.lightMin != null) {
+    const vals = [r.deepMin, r.remMin, r.lightMin, r.wakeMin];
+    const vars = ['--st-deep', '--st-rem', '--st-light', '--st-wake'];
+    const total = vals.reduce((a, b) => a + b, 0) || 1;
+    vals.forEach((v, i) => { const sp = document.createElement('span'); sp.style.width = `${(v / total) * 100}%`; sp.style.background = `var(${vars[i]})`; bar.append(sp); });
+    bar.hidden = false; legend.hidden = false;
+    stageLegend(legend, r);
+    bar.setAttribute('aria-label', `Slaapfases: diep ${hmm(r.deepMin / 60)}, REM ${hmm(r.remMin / 60)}, licht ${hmm(r.lightMin / 60)}, wakker ${hmm(r.wakeMin / 60)}`);
+    parts.push(`Efficiëntie ${nf0.format(r.efficiency * 100)}%`, `${r.awakenings}× wakker`);
+  } else {
+    bar.hidden = true; legend.hidden = true;
+    parts.push(r.manual ? 'Handmatig ingevoerd, geen fases' : 'Geen fases beschikbaar');
+  }
+  if (cons != null) parts.push(`consistentie ${cons}%`);
+  $('#ln-text').textContent = parts.join(' · ') + '.';
 }
 
 function renderZones(zs) {
@@ -601,6 +648,7 @@ function updateMeasureHints() {
   $('#hrv-hint').textContent = ok ? (demo ? 'Je meet nu met gesimuleerde demo-data.' : '') : need;
   $('#btn-night-start').disabled = !ok;
   $('#night-hint').textContent = ok ? (demo ? 'Demo-modus: de nacht wordt gesimuleerd in echte tijd.' : '') : need;
+  if (currentTab === 'measure' && currentPanel === 'night') showResumeNotice();
 }
 
 function startHrv() {
@@ -805,68 +853,185 @@ async function finishBreath(early = false) {
 /* ============================================================
    Meten: nacht
    ============================================================ */
-const night = { running: false, start: 0, samples: [], rr: [], unsub: null, timer: null, lastS: 0 };
+const NIGHT_KEY = 'whoop.nightProgress';
+const night = { running: false, start: 0, minutes: [], rr: [], samples: [], lastS: -30, lastData: 0, unsub: null, timer: null, saveTimer: null };
 
-function startNight() {
-  if (state.status !== 'connected') return;
-  Object.assign(night, { running: true, start: Date.now(), samples: [], rr: [], lastS: -30 });
+function nightListener(d) {
+  const now = Date.now();
+  const t = (now - night.start) / 1000;
+  const m = Math.floor(t / 60);
+  const slot = night.minutes[m] || (night.minutes[m] = { hr: [], rr: [] });
+  if (d.hr) slot.hr.push(d.hr);
+  slot.rr.push(...d.rr.map((x) => Math.round(x * 10) / 10));
+  night.rr.push(...d.rr);
+  night.lastData = now;
+  if (d.hr && t - night.lastS >= 30) { night.samples.push([Math.round(t), d.hr]); night.lastS = t; }
+  $('#night-hr').textContent = d.hr || '--';
+}
+
+function saveNightProgress() {
+  if (!night.running) return;
+  try {
+    localStorage.setItem(NIGHT_KEY, JSON.stringify({ start: night.start, lastData: night.lastData, minutes: night.minutes, samples: night.samples, demo: state.source?.kind === 'demo' }));
+    $('#night-saved').textContent = `Tussentijds bewaard om ${fmtClock.format(new Date())}`;
+  } catch {
+    $('#night-saved').textContent = 'Tussentijds bewaren lukt niet (opslag vol).';
+  }
+}
+function loadNightProgress() {
+  try { const p = JSON.parse(localStorage.getItem(NIGHT_KEY) || 'null'); return p && p.start ? p : null; } catch { return null; }
+}
+function clearNightProgress() { try { localStorage.removeItem(NIGHT_KEY); } catch {} }
+
+function showResumeNotice() {
+  const p = loadNightProgress();
+  const box = $('#night-resume');
+  if (!p || night.running) { box.hidden = true; return; }
+  const end = p.lastData || p.start;
+  box.hidden = false;
+  $('#night-resume-text').textContent = `Gestart om ${fmtDate.format(new Date(p.start))}, laatste data om ${fmtClock.format(new Date(end))} (${hmm((end - p.start) / 3600000)} u). Misschien is de pagina herladen of vergrendeld. Sla de nacht op of ga verder met meten.`;
+  $('#btn-resume-continue').disabled = state.status !== 'connected';
+}
+
+/* iPhone: stille video-loop voorkomt automatische schermvergrendeling als Wake Lock ontbreekt. */
+let keepAwakeVideo = null;
+async function startKeepAwake() {
+  await requestWakeLock();
+  if (wakeLock) return;
+  try {
+    if (!keepAwakeVideo) {
+      keepAwakeVideo = Object.assign(document.createElement('video'), { src: 'assets/keepawake.mp4', muted: true, loop: true, playsInline: true, className: 'keepawake' });
+      keepAwakeVideo.setAttribute('playsinline', ''); keepAwakeVideo.setAttribute('muted', ''); keepAwakeVideo.setAttribute('aria-hidden', 'true');
+      document.body.append(keepAwakeVideo);
+    }
+    await keepAwakeVideo.play();
+  } catch {}
+}
+function stopKeepAwake() {
+  releaseWakeLock();
+  if (keepAwakeVideo) { keepAwakeVideo.pause(); keepAwakeVideo.remove(); keepAwakeVideo = null; }
+}
+
+function beginNight(resume) {
+  Object.assign(night, resume
+    ? { running: true, start: resume.start, minutes: resume.minutes || [], samples: resume.samples || [], rr: (resume.minutes || []).flatMap((m) => (m ? m.rr : [])), lastS: -30, lastData: resume.lastData || 0 }
+    : { running: true, start: Date.now(), minutes: [], rr: [], samples: [], lastS: -30, lastData: 0 });
   if (state.source) state.source.persistent = true;
-  night.unsub = addListener((d) => {
-    const t = (Date.now() - night.start) / 1000;
-    night.rr.push(...d.rr);
-    // Hartslag elke 30 s bewaren (genoeg voor een grafiek, klein in opslag)
-    if (d.hr && t - night.lastS >= 30) { night.samples.push([Math.round(t), d.hr]); night.lastS = t; }
-    $('#night-hr').textContent = d.hr || '--';
-  });
+  if (state.source?.kind === 'demo') state.source.setSleep(true);
+  night.unsub = addListener(nightListener);
   $('#night-overlay').hidden = false;
-  requestWakeLock();
+  $('#night-resume').hidden = true;
+  $('#night-saved').textContent = '';
+  startKeepAwake();
   const tick = () => {
     $('#night-clock').textContent = fmtClock.format(new Date());
     $('#night-elapsed').textContent = hmm((Date.now() - night.start) / 3600000);
   };
   tick();
   night.timer = setInterval(tick, 5000);
+  night.saveTimer = setInterval(saveNightProgress, 60000);
+  saveNightProgress();
   $('#btn-night-stop').focus();
 }
+function startNight() { if (state.status === 'connected') beginNight(null); }
 
 async function stopNight() {
   if (!(await confirmDialog('Nachtmeting stoppen?', 'Je nacht wordt geanalyseerd en opgeslagen.', 'Stoppen', false))) return;
-  clearInterval(night.timer);
+  clearInterval(night.timer); clearInterval(night.saveTimer);
   night.unsub?.();
   night.running = false;
   if (state.source) state.source.persistent = false;
-  releaseWakeLock();
+  if (state.source?.kind === 'demo') state.source.setSleep(false);
+  stopKeepAwake();
   $('#night-overlay').hidden = true;
-  const duration = (Date.now() - night.start) / 1000;
-  const res = analyzeNight(night.rr);
+  await finalizeNight({ start: night.start, end: Date.now(), minutes: night.minutes, samples: night.samples, demo: state.source?.kind === 'demo' });
+}
+
+/** Analyseert een nacht (ook een onderbroken nacht) en slaat hem op. */
+async function finalizeNight(n) {
+  // Lege minuten aan het eind (na de laatste data) weglaten
+  let mins = n.minutes.map((m) => (m && (m.hr.length || m.rr.length) ? m : null));
+  while (mins.length && !mins[mins.length - 1]) mins.pop();
+  const end = Math.min(n.end, n.start + mins.length * 60000);
+  const duration = (end - n.start) / 1000;
+  clearNightProgress();
+  const flat = mins.flatMap((m) => (m ? m.rr : []));
+  const res = analyzeNight(flat);
   if (duration < 20 * 60 || !res) {
     toast(duration < 20 * 60 ? 'Nachtmeting te kort (minder dan 20 minuten), niet opgeslagen.' : 'Te weinig bruikbare gegevens om je nacht te analyseren.');
     return;
   }
+  const st = sleepStages(mins);
+  const strainYesterday = strainOf(dayKey(n.start)) || 0;
+  const need = sleepNeed(settings.sleepNeed, strainYesterday, []);
   const rec = {
-    type: 'night', date: night.start, duration, ...res,
-    samples: night.samples, rr: night.rr, demo: state.source?.kind === 'demo',
+    type: 'night', date: n.start, duration, ...res, need,
+    samples: n.samples, rr: flat, demo: !!n.demo,
   };
+  if (st) {
+    Object.assign(rec, {
+      sleepHours: st.sleepMin / 60, latency: st.latency, efficiency: st.efficiency, awakenings: st.awakenings, cycles: st.cycles,
+      wakeMin: st.wakeMin, lightMin: st.lightMin, deepMin: st.deepMin, remMin: st.remMin, unknownMin: st.unknownMin,
+      stages: encodeStages(st.stages), hrMin: st.hrMin,
+    });
+  } else {
+    // Geen duidelijk inslaapmoment gevonden: tijd met data als slaap
+    rec.sleepHours = mins.filter(Boolean).length / 60;
+  }
+  rec.gapMin = mins.filter((m) => !m).length;
   await safeAdd(rec);
   await refreshData();
   showNightResult(rec);
+  if (currentTab !== 'measure' || currentPanel !== 'night') location.hash = 'measure/night';
+}
+
+async function saveManualSleep(e) {
+  e.preventDefault();
+  const [bh, bm] = $('#ms-bed').value.split(':').map(Number);
+  const [wh, wm] = $('#ms-wake').value.split(':').map(Number);
+  const wake = new Date(); wake.setHours(wh, wm, 0, 0);
+  if (wake.getTime() > Date.now() + 60000) wake.setDate(wake.getDate() - 1);
+  const bed = new Date(wake); bed.setHours(bh, bm, 0, 0);
+  if (bed >= wake) bed.setDate(bed.getDate() - 1);
+  const duration = (wake - bed) / 1000;
+  const awake = clamp(Number($('#ms-latency').value) || 0, 0, duration / 60 - 1);
+  if (duration < 3600 || duration > 16 * 3600) { toast('Controleer je tijden: een nacht moet tussen 1 en 16 uur duren.'); return; }
+  await safeAdd({ type: 'night', manual: true, date: bed.getTime(), duration, sleepHours: (duration / 60 - awake) / 60, latency: awake, need: settings.sleepNeed, samples: [], rr: [] });
+  await refreshData();
+  toast(`Slaap opgeslagen: ${hmm((duration / 60 - awake) / 60)} uur.`);
+  location.hash = 'today';
 }
 
 function showNightResult(rec) {
   $('#night-intro').hidden = true;
   $('#night-result').hidden = false;
-  $('#night-date').textContent = `${fmtDate.format(new Date(rec.date))} – ${fmtClock.format(new Date(rec.date + rec.duration * 1000))}`;
-  $('#night-dur').textContent = hmm(rec.duration / 3600);
+  const endT = rec.date + rec.duration * 1000;
+  $('#night-date').textContent = `${fmtDate.format(new Date(rec.date))} – ${fmtClock.format(new Date(endT))} · ${hmm(rec.duration / 3600)} u in bed${rec.demo ? ' · demo' : ''}`;
+  const hours = sleepHoursOf(rec);
+  const need = rec.need || settings.sleepNeed;
+  $('#night-sleep').textContent = hmm(hours);
+  $('#night-perf').textContent = `${Math.min(100, Math.round((hours / need) * 100))}%`;
+  $('#night-eff').textContent = rec.efficiency != null ? `${nf0.format(rec.efficiency * 100)}%` : '–';
+  $('#night-lat').textContent = fmt0(rec.latency);
+  $('#night-awk').textContent = fmt0(rec.awakenings);
   $('#night-min').textContent = fmt0(rec.minHr);
   $('#night-rmssd').textContent = fmt0(rec.rmssd);
   $('#night-resp').textContent = fmt1(rec.respRate);
-  const r = recoveryFor(dayKey(rec.date + rec.duration * 1000));
+  const r = recoveryFor(dayKey(endT));
   $('#night-rec').textContent = r?.score != null ? `${r.score}%` : r ? `kalibreren ${r.calibrating}/3` : '–';
-  const need = settings.sleepNeed, hours = rec.duration / 3600;
   $('#night-text').textContent = hours >= need
-    ? `Je lag ${hmm(hours)} uur in bed. Dat dekt je slaapbehoefte van ${hmm(need)} uur.`
-    : `Je lag ${hmm(hours)} uur in bed, ${nf0.format((need - hours) * 60)} minuten minder dan je behoefte van ${hmm(need)} uur.`;
-  requestAnimationFrame(() => drawSparkline($('#night-chart'), (rec.segments || []).map((s) => s[0])));
+    ? `Je sliep ${hmm(hours)} uur. Dat dekt je slaapbehoefte van ${hmm(need)} uur.`
+    : `Je sliep ${hmm(hours)} uur, ${nf0.format((need - hours) * 60)} minuten minder dan je behoefte van ${hmm(need)} uur.`;
+  const stages = decodeStages(rec.stages);
+  $('#night-stages-card').hidden = !stages.length;
+  if (stages.length) {
+    stageLegend($('#night-stage-legend'), rec);
+    requestAnimationFrame(() => drawHypnogram($('#hypnogram'), stages, rec.date));
+    $('#hypnogram').setAttribute('aria-label', `Slaapfases: diep ${hmm(rec.deepMin / 60)}, REM ${hmm(rec.remMin / 60)}, licht ${hmm(rec.lightMin / 60)}, wakker ${hmm(rec.wakeMin / 60)} uur. ${rec.cycles || 0} slaapcycli.`);
+  }
+  $('#night-gaps').textContent = rec.gapMin > 5
+    ? `${rec.gapMin} minuten zonder data (verbinding weg of scherm vergrendeld). Die tijd is als slaap geteld, zonder fase.`
+    : 'Fases zijn een schatting op basis van hartslag en HRV, geen slaaplab.';
 }
 
 /* ============================================================
@@ -1055,7 +1220,7 @@ function historyItem(r) {
   let metrics = '';
   if (r.type === 'hrv') metrics = `RMSSD ${fmt0(r.rmssd)} ms · ln ${nf2.format(r.lnRmssd)} · ${fmt0(r.meanHr)} bpm`;
   else if (r.type === 'breath') metrics = `${rateText(r.rate)}/min · gem. ${fmt0(r.meanHr)} bpm${r.rmssd ? ` · RMSSD ${fmt0(r.rmssd)} ms` : ''}`;
-  else if (r.type === 'night') metrics = `laagste ${fmt0(r.minHr)} bpm · HRV ${fmt0(r.rmssd)} ms · ${fmt1(r.respRate)}/min`;
+  else if (r.type === 'night') metrics = r.manual ? `${hmm(sleepHoursOf(r))} u slaap · handmatig` : `${hmm(sleepHoursOf(r))} u slaap${r.deepMin != null ? ` · diep ${hmm(r.deepMin / 60)} · REM ${hmm(r.remMin / 60)}` : ''} · HRV ${fmt0(r.rmssd)} ms`;
   else metrics = `inspanning ${fmt1(r.strain)} · gem. ${fmt0(r.meanHr)} bpm · ${fmt0(r.kcal)} kcal`;
   const title = r.type === 'session' && r.activity ? `${TITLES.session} · ${r.activity}` : TITLES[r.type] || 'Sessie';
   const date = fmtDate.format(new Date(r.date));
@@ -1087,9 +1252,9 @@ const csvNum = (v, d = 1) => (v == null || !isFinite(v) ? '' : v.toFixed(d).repl
 const isoLocal = (t) => { const d = new Date(t); const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`; };
 
 function exportAll() {
-  const head = ['type', 'activiteit', 'datum', 'duur_s', 'rmssd_ms', 'ln_rmssd', 'sdnn_ms', 'gem_hartslag', 'min_hartslag', 'max_hartslag', 'ademfrequentie', 'inspanning', 'kcal', 'slagen', 'gefilterd', 'ademtempo_per_min', 'demo'];
+  const head = ['type', 'activiteit', 'datum', 'duur_s', 'slaap_u', 'diep_min', 'rem_min', 'licht_min', 'wakker_min', 'efficientie_pct', 'rmssd_ms', 'ln_rmssd', 'sdnn_ms', 'gem_hartslag', 'min_hartslag', 'max_hartslag', 'ademfrequentie', 'inspanning', 'kcal', 'slagen', 'gefilterd', 'ademtempo_per_min', 'demo'];
   const rows = [...records].sort((a, b) => a.date - b.date).map((r) => [
-    r.type, r.activity || '', isoLocal(r.date), csvNum(r.duration, 0), csvNum(r.rmssd), csvNum(r.lnRmssd, 3), csvNum(r.sdnn),
+    r.type, r.activity || '', isoLocal(r.date), csvNum(r.duration, 0), r.type === 'night' ? csvNum(sleepHoursOf(r), 2) : '', csvNum(r.deepMin, 0), csvNum(r.remMin, 0), csvNum(r.lightMin, 0), csvNum(r.wakeMin, 0), csvNum(r.efficiency != null ? r.efficiency * 100 : null, 0), csvNum(r.rmssd), csvNum(r.lnRmssd, 3), csvNum(r.sdnn),
     csvNum(r.meanHr), csvNum(r.minHr, 0), csvNum(r.maxHr, 0), csvNum(r.respRate), csvNum(r.strain), csvNum(r.kcal, 0),
     r.beats ?? '', r.removed ?? '', csvNum(r.rate), r.demo ? 'ja' : 'nee',
   ]);
@@ -1120,8 +1285,14 @@ function exportRecord(r) {
     const rows = (r.rr || []).map((rr, i) => { t += rr; return [i + 1, csvNum(t / 1000, 3), csvNum(rr, 1), f.flags[i] ? 'ja' : 'nee']; });
     downloadCsv(name, [['slag', 'tijd_s', 'rr_ms', 'behouden'], ...rows]);
   } else if (r.type === 'night') {
-    const rows = (r.segments || []).map(([hr, rm], i) => [i * 5, csvNum(hr), csvNum(rm)]);
-    downloadCsv(name, [['minuut', 'hartslag_bpm', 'rmssd_ms'], ...rows]);
+    const st = decodeStages(r.stages);
+    if (st.length) {
+      const rows = st.map((s, i) => [isoLocal(r.date + i * 60000).slice(11, 16), csvNum(r.hrMin?.[i]), s >= 0 ? STAGE_NAMES[s].toLowerCase() : 'geen data']);
+      downloadCsv(name, [['tijd', 'hartslag_bpm', 'fase'], ...rows]);
+    } else {
+      const rows = (r.segments || []).map(([hr, rm], i) => [i * 5, csvNum(hr), csvNum(rm)]);
+      downloadCsv(name, [['minuut', 'hartslag_bpm', 'rmssd_ms'], ...rows]);
+    }
   } else {
     const rows = (r.samples || []).map(([t, hr]) => [csvNum(t, 1), hr]);
     downloadCsv(name, [['tijd_s', 'hartslag_bpm'], ...rows]);
@@ -1195,7 +1366,21 @@ async function generateSampleData() {
     const minHr = 51 - effect * 12 + rnd(-1.5, 1.5);
     const segs = [];
     for (let s = 0; s < hours * 12; s++) segs.push([Math.round((minHr + 6 * Math.exp(-s / 25) + rnd(0, 3)) * 10) / 10, Math.round(nightRmssd * rnd(0.8, 1.15) * 10) / 10]);
-    await db.add({ type: 'night', date: wake - hours * 3600000, duration: hours * 3600, minHr, meanHr: minHr + 4, rmssd: nightRmssd, respRate: rnd(13.2, 15.2), segments: segs, samples: [], rr: [], demo: true, sample: true });
+    const inBed = Math.round(hours * 60 + rnd(10, 30));
+    const shift = Math.round(rnd(-8, 8));
+    const stages = Array.from({ length: inBed }, (_, k) => {
+      const st = simulatedStageAt(Math.max(0, k + shift));
+      return k > inBed - 4 ? 0 : (j.items.alcohol && st === 3 && Math.random() < 0.4 ? 1 : st);
+    });
+    const cnt = [0, 0, 0, 0]; stages.forEach((x) => cnt[x]++);
+    const lat = stages.findIndex((x) => x !== 0);
+    await db.add({
+      type: 'night', date: wake - inBed * 60000, duration: inBed * 60, minHr, meanHr: minHr + 4, rmssd: nightRmssd, respRate: rnd(13.2, 15.2), segments: segs,
+      sleepHours: (cnt[1] + cnt[2] + cnt[3]) / 60, latency: lat, efficiency: (cnt[1] + cnt[2] + cnt[3]) / inBed, awakenings: Math.round(rnd(0, 4)), cycles: Math.round(hours / 1.5),
+      wakeMin: cnt[0], lightMin: cnt[1], deepMin: cnt[2], remMin: cnt[3], unknownMin: 0, stages: encodeStages(stages),
+      hrMin: stages.map((x) => Math.round((minHr + [8, 3, 0, 5][x] + rnd(0, 2)) * 10) / 10), need: settings.sleepNeed,
+      samples: [], rr: [], demo: true, sample: true,
+    });
     const mRmssd = 48 * Math.exp(effect + rnd(-0.1, 0.1));
     await db.add({ type: 'hrv', date: wake + 15 * 60000, duration: 60, rmssd: mRmssd, lnRmssd: Math.log(mRmssd), sdnn: mRmssd * 1.1, meanHr: minHr + 9, respRate: rnd(12, 16), beats: 60, removed: Math.round(rnd(0, 3)), rr: [], demo: true, sample: true });
     if (i > 0) {
@@ -1349,6 +1534,7 @@ function route() {
     ['hrv', 'breath', 'night'].forEach((p) => { $(`#panel-${p}`).hidden = p !== currentPanel; });
     $$('.subnav a').forEach((a) => (a.dataset.panel === currentPanel ? a.setAttribute('aria-current', 'page') : a.removeAttribute('aria-current')));
     updateMeasureHints();
+    if (currentPanel === 'night') showResumeNotice();
   }
   if (tab === 'live') { liveChart.start(); requestAnimationFrame(() => liveChart.draw()); } else liveChart.stop();
   if (tab === 'today') renderToday();
@@ -1402,6 +1588,12 @@ async function init() {
   $('#btn-night-start').addEventListener('click', startNight);
   $('#btn-night-stop').addEventListener('click', stopNight);
   $('#btn-night-done').addEventListener('click', () => { $('#night-result').hidden = true; $('#night-intro').hidden = false; });
+  $('#manual-sleep').addEventListener('submit', saveManualSleep);
+  $('#btn-resume-save').addEventListener('click', async () => { const p = loadNightProgress(); if (p) await finalizeNight({ ...p, end: p.lastData || Date.now() }); $('#night-resume').hidden = true; });
+  $('#btn-resume-continue').addEventListener('click', () => { const p = loadNightProgress(); if (p && state.status === 'connected') beginNight(p); });
+  $('#btn-resume-discard').addEventListener('click', async () => {
+    if (await confirmDialog('Nachtmeting weggooien?', 'De onderbroken meting wordt definitief verwijderd.')) { clearNightProgress(); $('#night-resume').hidden = true; }
+  });
 
   $$('input[name="hist-filter"]').forEach((i) => i.addEventListener('change', () => { historyLimit = 15; renderHistoryList(); }));
   $('#btn-more').addEventListener('click', () => { historyLimit += 30; renderHistoryList(); });
@@ -1428,6 +1620,7 @@ async function init() {
   route();
   onStatus({ status: 'idle' });
   if (!settings.onboarded) openOnboarding();
+  else if (loadNightProgress()) toast('Er is een onderbroken nachtmeting. Zie Meten → Nacht.');
 
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
     navigator.serviceWorker.register('sw.js').catch(() => {});

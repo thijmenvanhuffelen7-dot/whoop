@@ -39,11 +39,24 @@ export class DemoSource extends EventTarget {
     else { this.breathHz = 0.22; this.rsaAmp = 3.5; }
   }
 
+  /** Slaapsimulatie aan/uit (voor de nachtmeting in demo-modus). */
+  setSleep(on) {
+    this.sleepStart = on ? performance.now() - this.t0 : null;
+  }
+
   _hrAt(tMs) {
     const t = tMs / 1000;
-    const resp = this.rsaAmp * Math.sin(2 * Math.PI * this.breathHz * t);
-    const slow = 2.2 * Math.sin(2 * Math.PI * 0.035 * t + 1.3);
-    return this.base + this.drift + resp + slow;
+    let amp = this.rsaAmp, offset = 0, wander = 2.2;
+    if (this.sleepStart != null) {
+      const stage = simulatedStageAt((tMs - this.sleepStart) / 60000);
+      // wakker, licht, diep, REM
+      offset = [6, -5, -10, -2][stage];
+      amp = [3, 4.5, 7.5, 1.8][stage];
+      wander = [3, 1.5, 0.6, 4.5][stage];
+    }
+    const resp = amp * Math.sin(2 * Math.PI * this.breathHz * t);
+    const slow = wander * Math.sin(2 * Math.PI * 0.03 * t + 1.3) + (wander > 4 ? 2.5 * Math.sin(2 * Math.PI * 0.011 * t) : 0);
+    return this.base + this.drift + offset + resp + slow;
   }
 
   _tick() {
@@ -92,4 +105,24 @@ export function buildPacket(hr, rrMs, { hr16 = false, energy = null } = {}) {
   if (energy != null) { dv.setUint16(o, energy, true); o += 2; }
   for (const ms of rrMs) { dv.setUint16(o, Math.round((ms * 1024) / 1000), true); o += 2; }
   return dv;
+}
+
+/**
+ * Gesimuleerd slaapverloop per minuut sinds bedtijd:
+ * 15 min inslapen, daarna cycli van ~90 min (licht → diep → licht → REM),
+ * met minder diepe slaap en meer REM later in de nacht, en af en toe kort wakker.
+ */
+export function simulatedStageAt(min) {
+  if (min < 15) return 0;
+  const m = min - 15;
+  const cycle = Math.floor(m / 90);
+  const p = m % 90;
+  const deep = Math.max(8, 40 - cycle * 10);
+  const rem = Math.min(35, 10 + cycle * 7);
+  const light2 = 90 - 20 - deep - rem;
+  if (cycle > 0 && p < 3 && cycle % 2 === 0) return 0;
+  if (p < 20) return 1;
+  if (p < 20 + deep) return 2;
+  if (p < 20 + deep + light2) return 1;
+  return 3;
 }

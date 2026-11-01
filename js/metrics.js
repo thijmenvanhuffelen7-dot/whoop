@@ -203,3 +203,129 @@ export function sleepNeed(base, strainToday, recentNights) {
   need += Math.min(1.5, debt * 0.25);
   return need;
 }
+
+/* ---------- Slaapfases ---------- */
+// Codes per minuut: 0 = wakker, 1 = licht, 2 = diep, 3 = REM, -1 = geen data.
+export const STAGE = { WAKE: 0, LIGHT: 1, DEEP: 2, REM: 3, NONE: -1 };
+export const STAGE_NAMES = ['Wakker', 'Licht', 'Diep', 'REM'];
+
+function robust(values) {
+  const s = [...values].sort((a, b) => a - b);
+  const q = (p) => s[Math.min(s.length - 1, Math.max(0, Math.round(p * (s.length - 1))))];
+  return { med: q(0.5), spread: Math.max(1e-6, (q(0.75) - q(0.25)) / 1.35) };
+}
+
+/**
+ * Schat slaapfases uit minuten met ruwe data ({hr: [...], rr: [...]} of null).
+ * Kenmerken per minuut, genormaliseerd t.o.v. je eigen nacht:
+ *  - hartslag (diep: laag, REM/wakker: hoger)
+ *  - RMSSD over 5 minuten (diep: hoog, REM: laag)
+ *  - instabiliteit: spreiding van de hartslag over 5 minuten (REM en wakker: hoog)
+ * Dit is een benadering, geen slaaplab (polysomnografie).
+ */
+export function sleepStages(minutes) {
+  const ep = minutes.map((m) => {
+    if (!m) return null;
+    const f = m.rr && m.rr.length >= 20 ? filterRR(m.rr) : null;
+    let hr = null;
+    if (f && f.kept.length >= 15) hr = 60000 / mean(f.kept);
+    else if (m.hr && m.hr.length) hr = mean(m.hr);
+    return hr ? { hr, diffs: f ? f.diffs : [] } : null;
+  });
+  const n = ep.length;
+  const feat = ep.map((e, i) => {
+    if (!e) return null;
+    const win = ep.slice(Math.max(0, i - 2), i + 3).filter(Boolean);
+    const diffs = win.flatMap((w) => w.diffs);
+    const r = diffs.length >= 20 ? rmssd(diffs) : null;
+    const hrs = win.map((w) => w.hr);
+    return { hr: e.hr, lnr: r ? Math.log(r) : null, inst: hrs.length >= 3 ? sd(hrs) : null };
+  });
+  const valid = feat.filter(Boolean);
+  if (valid.length < 20) return null;
+  const H = robust(valid.map((f) => f.hr));
+  const R = robust(valid.filter((f) => f.lnr != null).map((f) => f.lnr).concat(valid.length ? [] : [0]));
+  const I = robust(valid.filter((f) => f.inst != null).map((f) => f.inst));
+
+  // Inslapen: eerste moment met 10 minuten op rij een rustige hartslag
+  const calm = (f) => f && f.hr < H.med + 0.6 * H.spread;
+  let onset = -1;
+  for (let i = 0; i + 10 <= n; i++) {
+    if (feat.slice(i, i + 10).every(calm)) { onset = i; break; }
+  }
+  if (onset < 0) return null;
+
+  const raw = feat.map((f, i) => {
+    if (!f) return STAGE.NONE;
+    if (i < onset) return STAGE.WAKE;
+    const hz = (f.hr - H.med) / H.spread;
+    const rz = f.lnr != null && R.spread ? (f.lnr - R.med) / R.spread : 0;
+    const iz = f.inst != null ? (f.inst - I.med) / I.spread : 0;
+    if (hz > 2.2 || (hz > 1.2 && iz > 1.5)) return STAGE.WAKE;
+    const deep = -0.8 * hz + 1.0 * rz - 0.6 * iz;
+    const rem = 0.6 * hz - 0.6 * rz + 0.9 * iz;
+    if (deep > 1.0) return STAGE.DEEP;
+    if (rem > 1.15 && i - onset > 60) return STAGE.REM;
+    return STAGE.LIGHT;
+  });
+
+  // Glad strijken: meest voorkomende fase in een venster van 5 minuten
+  const stages = raw.map((s, i) => {
+    if (s === STAGE.NONE) return s;
+    const cnt = [0, 0, 0, 0];
+    for (let k = Math.max(0, i - 2); k <= Math.min(n - 1, i + 2); k++) if (raw[k] >= 0) cnt[raw[k]]++;
+    let best = s;
+    for (let c = 0; c < 4; c++) if (cnt[c] > cnt[best]) best = c;
+    return best;
+  });
+  for (let i = 0; i < onset; i++) if (stages[i] !== STAGE.NONE) stages[i] = STAGE.WAKE;
+
+  // Laatste slaapminuut; alles daarna is wakker
+  let end = n - 1;
+  while (end > onset && (stages[end] === STAGE.WAKE || stages[end] === STAGE.NONE)) end--;
+  for (let i = end + 1; i < n; i++) if (stages[i] !== STAGE.NONE) stages[i] = STAGE.WAKE;
+
+  const mins = [0, 0, 0, 0];
+  let unknown = 0, awakenings = 0, inWake = 0;
+  for (let i = onset; i <= end; i++) {
+    const s = stages[i];
+    if (s === STAGE.NONE) { unknown++; continue; }
+    mins[s]++;
+    if (s === STAGE.WAKE) inWake++;
+    else { if (inWake >= 2) awakenings++; inWake = 0; }
+  }
+  // Minuten zonder data binnen de slaapperiode tellen als slaap (fase onbekend)
+  const asleep = mins[1] + mins[2] + mins[3] + unknown;
+  // Cycli: REM-periodes van minstens 10 minuten (kortere onderbrekingen samengevoegd)
+  let remBouts = 0, run = 0, lastRemEnd = -99;
+  for (let i = onset; i <= end + 1; i++) {
+    if (stages[i] === STAGE.REM) run++;
+    else if (run) { if (run >= 10 && i - run - lastRemEnd > 30) remBouts++; if (run >= 10) lastRemEnd = i; run = 0; }
+  }
+  return {
+    stages,
+    onset, end,
+    latency: onset,
+    sleepMin: asleep,
+    wakeMin: stages.filter((x) => x === STAGE.WAKE).length,
+    lightMin: mins[1], deepMin: mins[2], remMin: mins[3], unknownMin: unknown,
+    efficiency: asleep / Math.max(1, n),
+    awakenings,
+    cycles: remBouts,
+    hrMin: ep.map((e) => (e ? Math.round(e.hr * 10) / 10 : null)),
+  };
+}
+
+/** Compacte opslag: fases als tekst ("0011222…", "-" = geen data). */
+export const encodeStages = (s) => s.map((x) => (x < 0 ? '-' : String(x))).join('');
+export const decodeStages = (str) => [...(str || '')].map((c) => (c === '-' ? -1 : Number(c)));
+
+/** Slaapconsistentie 0–100 uit de spreiding van bed- en opsta-tijden (minuten). */
+export function sleepConsistency(nights) {
+  if (nights.length < 3) return null;
+  const minuteOfDay = (t, shift) => { const d = new Date(t); let m = d.getHours() * 60 + d.getMinutes(); if (shift && m < 720) m += 1440; return m; };
+  const beds = nights.map((n) => minuteOfDay(n.start, true));
+  const wakes = nights.map((n) => minuteOfDay(n.end, false));
+  const spread = ((sd(beds) || 0) + (sd(wakes) || 0)) / 2;
+  return clamp(Math.round(100 - spread * 0.9), 0, 100);
+}
