@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="nl" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>WHOOP · Live hartslag & HRV</title>
+  <meta name="description" content="Live hartslag en HRV van je eigen WHOOP-band via Web Bluetooth. Alles blijft lokaal op je toestel.">
+  <meta name="theme-color" content="#0b0d10" id="meta-theme">
+  <meta name="color-scheme" content="dark light">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="WHOOP">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="css/styles.css">
+  <script>
+    // Thema zo vroeg mogelijk zetten om flitsen te voorkomen
+    try {
+      var s = JSON.parse(localStorage.getItem('whoop.settings') || '{}');
+      var t = s.theme || 'dark';
+      if (t === 'system') t = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+      document.documentElement.dataset.theme = t;
+    } catch (e) {}
+  </script>
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Naar inhoud</a>
+
+  <header class="topbar">
+    <div class="brand" aria-hidden="true">
+      <img src="icons/icon.svg" alt="" width="28" height="28">
+      <span>WHOOP</span>
+    </div>
+    <div class="topbar-status">
+      <span class="battery" id="battery" hidden aria-label="Batterij">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="2" y="7" width="17" height="10" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="20" y="10" width="2" height="4" rx="1" fill="currentColor"/><rect id="battery-fill" x="4" y="9" width="13" height="6" rx="1.2" fill="currentColor"/></svg>
+        <span id="battery-text">–</span>
+      </span>
+      <span class="status-pill" id="status-pill" data-status="idle" role="status" aria-live="polite">
+        <span class="dot" aria-hidden="true"></span>
+        <span id="status-text">Niet verbonden</span>
+      </span>
+    </div>
+  </header>
+
+  <main id="main" tabindex="-1">
+
+    <!-- ================= LIVE ================= -->
+    <section class="screen" id="screen-live" aria-labelledby="h-live">
+      <h1 class="sr-only" id="h-live">Live</h1>
+
+      <div class="notice notice-warn" id="no-bt-notice" hidden>
+        <h2>Bluetooth is niet beschikbaar in deze browser</h2>
+        <p>Safari en sommige andere browsers ondersteunen geen Web Bluetooth. Gebruik op iPhone de gratis app <strong>Bluefy</strong> (App Store) en open deze pagina daarin. Op Android en desktop werkt <strong>Chrome</strong> of <strong>Edge</strong>.</p>
+        <p class="muted">Je kunt de app wel uitproberen met de demo-modus hieronder.</p>
+      </div>
+
+      <div class="notice notice-warn" id="insecure-notice" hidden>
+        <h2>Beveiligde verbinding nodig</h2>
+        <p>Web Bluetooth werkt alleen via <strong>https://</strong>. Open de app via je GitHub Pages- of Netlify-adres.</p>
+      </div>
+
+      <div class="notice notice-info" id="no-hr-notice" hidden>
+        <h2>Je band deelt (nog) geen hartslag</h2>
+        <p>De verbinding lukte, maar de band biedt de standaard hartslagdienst niet aan. Zo los je het meestal op:</p>
+        <ol>
+          <li>Open de officiële WHOOP-app en zet <strong>Hartslag uitzenden</strong> (Heart Rate Broadcast) aan bij de apparaatinstellingen.</li>
+          <li>Sluit daarna de WHOOP-app helemaal af.</li>
+          <li>Kom terug en tik opnieuw op <strong>Verbind met WHOOP</strong>.</li>
+        </ol>
+        <button class="btn btn-ghost" type="button" data-dismiss="no-hr-notice">Begrepen</button>
+      </div>
+
+      <div class="notice notice-error" id="error-notice" hidden role="alert">
+        <p id="error-text"></p>
+        <button class="btn btn-ghost" type="button" data-dismiss="error-notice">Sluiten</button>
+      </div>
+
+      <div class="card hero" id="hero">
+        <div class="hero-top">
+          <span class="zone-chip" id="zone-chip">—</span>
+          <span class="contact-chip" id="contact-chip" hidden>Geen huidcontact</span>
+        </div>
+        <div class="hr-wrap">
+          <svg class="heart" id="heart" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.6-9.3C1 8.3 3.2 4.5 6.9 4.5c2.1 0 3.6 1.1 5.1 3 1.5-1.9 3-3 5.1-3 3.7 0 5.9 3.8 4.5 7.2C19.5 16.4 12 21 12 21z" fill="currentColor"/></svg>
+          <div class="hr-number" id="hr-number" aria-hidden="true">--</div>
+          <div class="hr-unit" aria-hidden="true">bpm</div>
+        </div>
+        <p class="sr-only" id="hr-sr" aria-live="polite"></p>
+        <p class="hero-sub" id="hero-sub">Verbind je band om te beginnen</p>
+      </div>
+
+      <div class="card chart-card">
+        <div class="card-head">
+          <h2 class="card-title">Laatste 60 seconden</h2>
+          <span class="muted small" id="chart-range"></span>
+        </div>
+        <canvas id="live-chart" class="live-chart" role="img" aria-label="Grafiek van je hartslag in de laatste 60 seconden"></canvas>
+      </div>
+
+      <div class="stat-grid">
+        <div class="stat">
+          <span class="stat-label">RMSSD live</span>
+          <span class="stat-value"><span id="live-rmssd">–</span><small>ms</small></span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Gem. 60 s</span>
+          <span class="stat-value"><span id="live-avg">–</span><small>bpm</small></span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Min / max</span>
+          <span class="stat-value"><span id="live-minmax">–</span></span>
+        </div>
+      </div>
+
+      <div class="actions" id="actions-idle">
+        <button class="btn btn-primary btn-lg" type="button" id="btn-connect">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M7 7l10 10-5 4V3l5 4L7 17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Verbind met WHOOP
+        </button>
+        <div class="actions-row">
+          <button class="btn btn-secondary" type="button" id="btn-connect-all">Toon alle apparaten</button>
+          <button class="btn btn-secondary" type="button" id="btn-demo">Demo-modus</button>
+        </div>
+      </div>
+
+      <div class="actions" id="actions-connected" hidden>
+        <button class="btn btn-primary btn-lg" type="button" id="btn-record" aria-pressed="false">
+          <span class="rec-dot" aria-hidden="true"></span>
+          <span id="btn-record-text">Start sessie-opname</span>
+        </button>
+        <p class="muted small center" id="record-info" hidden></p>
+        <div class="actions-row">
+          <button class="btn btn-secondary" type="button" id="btn-retry" hidden>Opnieuw verbinden</button>
+          <button class="btn btn-secondary" type="button" id="btn-disconnect">Verbinding verbreken</button>
+        </div>
+      </div>
+
+      <div class="notice notice-info ios-hint" id="ios-hint" hidden>
+        <h2>Zet op je beginscherm</h2>
+        <p id="ios-hint-text"></p>
+        <button class="btn btn-ghost" type="button" id="ios-hint-close">Niet meer tonen</button>
+      </div>
+    </section>
+
+    <!-- ================= HRV ================= -->
+    <section class="screen" id="screen-hrv" aria-labelledby="h-hrv" hidden>
+      <h1 class="screen-title" id="h-hrv">HRV-meting</h1>
+
+      <div id="hrv-intro">
+        <div class="card">
+          <p>Meet je hartslagvariabiliteit op een rustig moment, bij voorkeur 's ochtends direct na het opstaan, elke dag op dezelfde manier.</p>
+          <ul class="checklist">
+            <li>Zit of lig stil en ontspannen</li>
+            <li>Adem normaal door je neus</li>
+            <li>Praat en beweeg niet tijdens de meting</li>
+          </ul>
+        </div>
+        <fieldset class="segmented" aria-label="Meetduur">
+          <legend class="sr-only">Meetduur</legend>
+          <label><input type="radio" name="hrv-dur" value="60"><span>1 minuut</span></label>
+          <label><input type="radio" name="hrv-dur" value="180"><span>3 minuten</span></label>
+        </fieldset>
+        <button class="btn btn-primary btn-lg" type="button" id="btn-hrv-start">Start meting</button>
+        <p class="muted small center" id="hrv-hint"></p>
+      </div>
+
+      <div id="hrv-running" hidden>
+        <div class="ring-wrap">
+          <svg class="ring" viewBox="0 0 200 200" aria-hidden="true">
+            <circle cx="100" cy="100" r="88" class="ring-track"/>
+            <circle cx="100" cy="100" r="88" class="ring-progress" id="hrv-ring"/>
+          </svg>
+          <div class="ring-center">
+            <span class="ring-label" id="hrv-phase">Maak je klaar</span>
+            <span class="ring-time" id="hrv-time" role="timer" aria-live="off">0:00</span>
+            <span class="ring-sub"><span id="hrv-hr">--</span> bpm · <span id="hrv-beats">0</span> slagen</span>
+          </div>
+        </div>
+        <p class="center muted" id="hrv-instruction">Zit of lig stil en adem rustig.</p>
+        <button class="btn btn-secondary btn-lg" type="button" id="btn-hrv-stop">Stop meting</button>
+      </div>
+
+      <div id="hrv-result" hidden>
+        <div class="card result-card">
+          <span class="muted small" id="res-date"></span>
+          <div class="result-main">
+            <span class="result-big" id="res-rmssd">–</span>
+            <span class="result-unit">ms RMSSD</span>
+          </div>
+          <p class="compare" id="res-compare"></p>
+        </div>
+        <div class="stat-grid stat-grid-2">
+          <div class="stat"><span class="stat-label">ln(RMSSD)</span><span class="stat-value" id="res-ln">–</span></div>
+          <div class="stat"><span class="stat-label">SDNN</span><span class="stat-value"><span id="res-sdnn">–</span><small>ms</small></span></div>
+          <div class="stat"><span class="stat-label">Gem. hartslag</span><span class="stat-value"><span id="res-hr">–</span><small>bpm</small></span></div>
+          <div class="stat"><span class="stat-label">Slagen gebruikt</span><span class="stat-value" id="res-beats">–</span></div>
+        </div>
+        <p class="muted small center" id="res-filtered"></p>
+        <button class="btn btn-primary btn-lg" type="button" id="btn-hrv-done">Klaar</button>
+      </div>
+    </section>
+
+    <!-- ================= ADEMHALING ================= -->
+    <section class="screen" id="screen-breath" aria-labelledby="h-breath" hidden>
+      <h1 class="screen-title" id="h-breath">Ademhaling</h1>
+
+      <div class="breath-stage">
+        <div class="breath-circle" id="breath-circle" aria-hidden="true">
+          <div class="breath-glow"></div>
+        </div>
+        <div class="breath-center">
+          <span class="breath-label" id="breath-label" aria-live="polite">Klaar?</span>
+          <span class="breath-hr"><span id="breath-hr">--</span> <small>bpm</small></span>
+        </div>
+      </div>
+      <canvas id="breath-chart" class="breath-chart" hidden aria-hidden="true"></canvas>
+      <p class="center muted" id="breath-timer" role="timer"></p>
+
+      <div id="breath-setup">
+        <div class="card">
+          <div class="stepper-row">
+            <span id="lbl-rate">Ademtempo</span>
+            <div class="stepper" role="group" aria-labelledby="lbl-rate">
+              <button type="button" class="btn-icon" id="rate-down" aria-label="Langzamer ademen">−</button>
+              <output id="rate-value" aria-live="polite">6</output>
+              <button type="button" class="btn-icon" id="rate-up" aria-label="Sneller ademen">+</button>
+            </div>
+          </div>
+          <p class="muted small" id="rate-desc"></p>
+        </div>
+        <fieldset class="segmented" aria-label="Duur">
+          <legend class="sr-only">Duur</legend>
+          <label><input type="radio" name="breath-dur" value="180" checked><span>3 min</span></label>
+          <label><input type="radio" name="breath-dur" value="300"><span>5 min</span></label>
+          <label><input type="radio" name="breath-dur" value="600"><span>10 min</span></label>
+        </fieldset>
+        <button class="btn btn-primary btn-lg" type="button" id="btn-breath-start">Start</button>
+      </div>
+
+      <div id="breath-running" hidden>
+        <button class="btn btn-secondary btn-lg" type="button" id="btn-breath-stop">Stoppen</button>
+      </div>
+
+      <div id="breath-summary" hidden>
+        <div class="card">
+          <h2 class="card-title">Mooi gedaan</h2>
+          <p class="muted" id="sum-text"></p>
+        </div>
+        <div class="stat-grid stat-grid-2">
+          <div class="stat"><span class="stat-label">Duur</span><span class="stat-value" id="sum-dur">–</span></div>
+          <div class="stat"><span class="stat-label">Gem. hartslag</span><span class="stat-value"><span id="sum-hr">–</span><small>bpm</small></span></div>
+          <div class="stat"><span class="stat-label">Begin → eind</span><span class="stat-value" id="sum-delta">–</span></div>
+          <div class="stat"><span class="stat-label">RMSSD</span><span class="stat-value"><span id="sum-rmssd">–</span><small>ms</small></span></div>
+        </div>
+        <button class="btn btn-primary btn-lg" type="button" id="btn-breath-done">Klaar</button>
+      </div>
+    </section>
+
+    <!-- ================= GESCHIEDENIS ================= -->
+    <section class="screen" id="screen-history" aria-labelledby="h-history" hidden>
+      <h1 class="screen-title" id="h-history">Geschiedenis</h1>
+
+      <div class="card chart-card">
+        <div class="card-head">
+          <h2 class="card-title">HRV-trend</h2>
+          <span class="muted small">RMSSD · 30 dagen</span>
+        </div>
+        <canvas id="trend-chart" class="trend-chart" role="img" aria-label="Trend van je RMSSD over de afgelopen 30 dagen"></canvas>
+        <p class="empty small" id="trend-empty" hidden>Nog geen HRV-metingen. Doe je eerste meting op het tabblad HRV.</p>
+      </div>
+
+      <fieldset class="chips" aria-label="Filter">
+        <legend class="sr-only">Filter</legend>
+        <label><input type="radio" name="hist-filter" value="all" checked><span>Alles</span></label>
+        <label><input type="radio" name="hist-filter" value="hrv"><span>HRV</span></label>
+        <label><input type="radio" name="hist-filter" value="breath"><span>Adem</span></label>
+        <label><input type="radio" name="hist-filter" value="session"><span>Sessies</span></label>
+      </fieldset>
+
+      <ul class="history-list" id="history-list"></ul>
+      <div class="empty-state" id="history-empty" hidden>
+        <svg viewBox="0 0 24 24" width="40" height="40" aria-hidden="true"><path d="M3 12h4l2-5 4 10 2-5h6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <p><strong>Nog niets opgeslagen</strong></p>
+        <p class="muted small">Metingen, ademsessies en opnames verschijnen hier. Alles blijft op dit toestel.</p>
+      </div>
+
+      <div class="actions-row">
+        <button class="btn btn-secondary" type="button" id="btn-export">Exporteer CSV</button>
+        <button class="btn btn-danger-ghost" type="button" id="btn-clear">Alles verwijderen</button>
+      </div>
+    </section>
+
+    <!-- ================= INSTELLINGEN ================= -->
+    <section class="screen" id="screen-settings" aria-labelledby="h-settings" hidden>
+      <h1 class="screen-title" id="h-settings">Instellingen</h1>
+
+      <form class="card form" id="settings-form" novalidate>
+        <h2 class="card-title">Hartslagzones</h2>
+        <div class="field">
+          <label for="set-age">Leeftijd</label>
+          <input id="set-age" name="age" type="number" inputmode="numeric" min="10" max="100" placeholder="bijv. 35">
+        </div>
+        <div class="field">
+          <label for="set-max">Maximale hartslag <span class="muted">(optioneel)</span></label>
+          <input id="set-max" name="maxHr" type="number" inputmode="numeric" min="120" max="230" placeholder="automatisch" aria-describedby="max-help">
+          <p class="help" id="max-help"></p>
+        </div>
+        <div class="field">
+          <label for="set-rest">Rusthartslag</label>
+          <input id="set-rest" name="restHr" type="number" inputmode="numeric" min="30" max="110" placeholder="bijv. 58">
+        </div>
+
+        <h2 class="card-title">Metingen</h2>
+        <div class="field">
+          <span class="label" id="lbl-dur">Standaard meetduur HRV</span>
+          <div class="segmented" role="radiogroup" aria-labelledby="lbl-dur">
+            <label><input type="radio" name="hrvDuration" value="60"><span>1 minuut</span></label>
+            <label><input type="radio" name="hrvDuration" value="180"><span>3 minuten</span></label>
+          </div>
+        </div>
+
+        <h2 class="card-title">Weergave</h2>
+        <div class="field">
+          <span class="label" id="lbl-theme">Thema</span>
+          <div class="segmented" role="radiogroup" aria-labelledby="lbl-theme">
+            <label><input type="radio" name="theme" value="dark"><span>Donker</span></label>
+            <label><input type="radio" name="theme" value="light"><span>Licht</span></label>
+            <label><input type="radio" name="theme" value="system"><span>Systeem</span></label>
+          </div>
+        </div>
+      </form>
+
+      <div class="card">
+        <h2 class="card-title">Over</h2>
+        <p class="muted small">Alle gegevens worden alleen lokaal op dit toestel opgeslagen (IndexedDB). Er gaat niets naar een server.</p>
+        <button class="btn btn-secondary" type="button" id="btn-onboarding">Introductie opnieuw bekijken</button>
+      </div>
+
+      <p class="disclaimer">Persoonlijk gebruik. Geen medisch advies.</p>
+      <p class="disclaimer muted small">Niet verbonden aan of goedgekeurd door WHOOP, Inc.</p>
+    </section>
+  </main>
+
+  <!-- ================= TABBALK ================= -->
+  <nav class="tabbar" aria-label="Hoofdmenu">
+    <a href="#live" class="tab" data-tab="live">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l2.5-6 5 12 2.5-6h4" /></svg>
+      <span>Live</span>
+    </a>
+    <a href="#hrv" class="tab" data-tab="hrv">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.3-8.8-8.6C1.9 8.2 4 5 7.2 5c2 0 3.4 1 4.8 2.8C13.4 6 14.8 5 16.8 5 20 5 22.1 8.2 20.8 11.4 19 15.7 12 20 12 20z"/><path d="M7.5 12h2l1.2-2.2 2 4.4 1.3-2.2h2.5"/></svg>
+      <span>HRV</span>
+    </a>
+    <a href="#breath" class="tab" data-tab="breath">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/></svg>
+      <span>Adem</span>
+    </a>
+    <a href="#history" class="tab" data-tab="history">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5"/><path d="M4 19h16"/><path d="M7 15l4-4 3 3 5-6"/></svg>
+      <span>Geschiedenis</span>
+    </a>
+    <a href="#settings" class="tab" data-tab="settings">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10"/><path d="M18 7h2"/><circle cx="16" cy="7" r="2"/><path d="M4 17h2"/><path d="M10 17h10"/><circle cx="8" cy="17" r="2"/></svg>
+      <span>Instellingen</span>
+    </a>
+  </nav>
+
+  <!-- ================= ONBOARDING ================= -->
+  <div class="onboarding" id="onboarding" role="dialog" aria-modal="true" aria-labelledby="ob-title" hidden>
+    <div class="ob-card">
+      <div class="ob-art" id="ob-art" aria-hidden="true"></div>
+      <h2 id="ob-title"></h2>
+      <p id="ob-text"></p>
+      <div class="ob-dots" aria-hidden="true"><span></span><span></span><span></span></div>
+      <p class="sr-only" id="ob-step" aria-live="polite"></p>
+      <div class="ob-actions">
+        <button class="btn btn-ghost" type="button" id="ob-skip">Overslaan</button>
+        <button class="btn btn-primary" type="button" id="ob-next">Volgende</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= BEVESTIGEN ================= -->
+  <div class="modal" id="confirm" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-text" hidden>
+    <div class="modal-card">
+      <h2 id="confirm-title"></h2>
+      <p id="confirm-text" class="muted"></p>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" type="button" id="confirm-cancel">Annuleren</button>
+        <button class="btn btn-danger" type="button" id="confirm-ok">Verwijderen</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+</body>
+</html>
