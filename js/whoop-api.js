@@ -9,7 +9,7 @@ const STATE_KEY = 'whoop.oauthState';
 
 export function proxyBase(settings) {
   if (settings.whoopProxy) return settings.whoopProxy.replace(/\/+$/, '');
-  if (/\.netlify\.app$/.test(location.hostname)) return `${location.origin}/api/whoop`;
+  if (/\.(netlify|vercel)\.app$/.test(location.hostname)) return `${location.origin}/api/whoop`;
   return '';
 }
 

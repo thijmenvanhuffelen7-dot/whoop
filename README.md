@@ -53,8 +53,8 @@ Daarvoor is een klein inlogstukje (proxy) nodig, omdat de geheime sleutel van WH
 
 | Onderdeel | Gratis dienst | Limiet (ruim genoeg) |
 |---|---|---|
-| App | GitHub Pages of Netlify | onbeperkt voor persoonlijk gebruik |
-| Proxy | Netlify Functions **of** Cloudflare Workers | 125.000/maand resp. 100.000/dag |
+| App | Vercel, GitHub Pages of Netlify | onbeperkt voor persoonlijk gebruik |
+| Proxy | Vercel Functions, Netlify Functions **of** Cloudflare Workers | ruim binnen de gratis limieten |
 | WHOOP-API | developer.whoop.com | gratis bij je lidmaatschap |
 
 Per bijwerking zijn er ongeveer 6 verzoeken, en de app werkt automatisch hooguit eens per 15 minuten bij.
@@ -65,7 +65,16 @@ Per bijwerking zijn er ongeveer 6 verzoeken, en de app werkt automatisch hooguit
 3. Vul bij **Redirect URL** het callback-adres in (zie stap 2A of 2B). Bij privacybeleid mag je je app-adres invullen.
 4. Noteer **Client ID** en **Client Secret**.
 
-### Stap 2A: alles op Netlify (aanbevolen, één dienst)
+### Stap 2 (Vercel): alles op Vercel
+1. Importeer deze repo in Vercel. Er is geen build-stap nodig. De functie staat in `api/whoop/[action].js`.
+2. Zet bij **Settings → Environment Variables** (voor Production):
+   - `WHOOP_CLIENT_ID`
+   - `WHOOP_CLIENT_SECRET`
+   - `APP_URL` = `https://<jouw-project>.vercel.app/`
+3. Gebruik als Redirect URL bij WHOOP: `https://<jouw-project>.vercel.app/api/whoop/callback`
+4. Ga naar **Deployments → Redeploy**, zodat de variabelen actief worden. Open daarna de app → **Instellingen → Koppel met WHOOP**. Het proxy-adres mag je leeg laten.
+
+### Stap 2A: alles op Netlify (één dienst)
 1. Ga naar app.netlify.com → **Add new site → Import an existing project** en kies deze GitHub-repo. Er is geen build-instelling nodig, `netlify.toml` regelt dat.
 2. Zet bij **Site configuration → Environment variables**:
    - `WHOOP_CLIENT_ID`
@@ -119,3 +128,4 @@ python3 -m http.server 8000
 | `js/whoop-api.js` | Koppeling met de officiële WHOOP-API: inloggen, verversen, synchroniseren |
 | `server/whoop-proxy.mjs` | Stateless proxy (Cloudflare Worker of via Netlify) |
 | `netlify/functions/whoop.mjs`, `netlify.toml` | Netlify-opzet |
+| `api/whoop/[action].js`, `package.json` | Vercel-opzet |

@@ -1,0 +1,6 @@
+{
+  "name": "whoop-pwa",
+  "private": true,
+  "type": "module",
+  "description": "Statische PWA; alleen api/ bevat een serverless functie (Vercel). Geen build-stap."
+}
