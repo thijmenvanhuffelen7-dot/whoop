@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="nl" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Privacybeleid · WHOOP-app</title>
+  <meta name="description" content="Privacybeleid van deze persoonlijke hartslag- en HRV-app.">
+  <meta name="theme-color" content="#0b0d10">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/styles.css">
+  <script>
+    try {
+      var s = JSON.parse(localStorage.getItem('whoop.settings') || '{}');
+      var t = s.theme || 'dark';
+      if (t === 'system') t = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+      document.documentElement.dataset.theme = t;
+    } catch (e) {}
+  </script>
+  <style>
+    body { padding-bottom: calc(32px + var(--safe-bottom)); }
+    .policy { max-width: 680px; margin: 0 auto; padding: 8px 16px 32px; display: flex; flex-direction: column; gap: 16px; }
+    .policy h1 { font-size: 28px; padding-top: 8px; }
+    .policy h2 { font-size: 18px; }
+    .policy p, .policy li { color: var(--text); }
+    .policy ul { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+    .policy a { color: var(--accent); }
+    .lang { display: flex; gap: 8px; }
+    .lang a { min-height: 44px; display: inline-flex; align-items: center; padding: 0 14px; border-radius: 999px; background: var(--surface); border: 1px solid var(--border); text-decoration: none; color: var(--text); font-weight: 600; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <main class="policy">
+    <a class="btn btn-ghost" href="./#settings" style="align-self:flex-start">← Terug naar de app</a>
+    <nav class="lang" aria-label="Taal"><a href="#nl" lang="nl">Nederlands</a><a href="#en" lang="en">English</a></nav>
+
+    <article id="nl" lang="nl" class="card">
+      <h1>Privacybeleid</h1>
+      <p class="muted small">Laatst bijgewerkt: 2 november 2026</p>
+
+      <h2>Wat is deze app?</h2>
+      <p>Deze web-app is gemaakt voor persoonlijk gebruik. Je kunt er hartslag, HRV, slaap en herstel mee bekijken van je eigen WHOOP-band en je eigen WHOOP-account. De app is niet verbonden aan WHOOP, Inc. en geeft geen medisch advies.</p>
+
+      <h2>Welke gegevens worden gebruikt?</h2>
+      <ul>
+        <li><strong>Via Bluetooth:</strong> hartslag, RR-intervallen (tijd tussen hartslagen) en het batterijniveau van je band.</li>
+        <li><strong>Via de WHOOP-API</strong> (alleen als je zelf koppelt): slaap, herstel, cycli en inspanning, trainingen, en lichaamsmaten (lengte, gewicht en maximale hartslag). De app vraagt alleen <em>leesrechten</em>. Er wordt nooit iets naar je WHOOP-account geschreven.</li>
+        <li><strong>Wat je zelf invoert:</strong> instellingen (zoals leeftijd en gewicht) en dagboeknotities.</li>
+      </ul>
+
+      <h2>Waar worden je gegevens bewaard?</h2>
+      <ul>
+        <li><strong>Alleen op je eigen toestel</strong>, in de opslag van je browser (IndexedDB en localStorage). Er is geen database en geen account bij deze app.</li>
+        <li>Je inlogsleutels voor WHOOP (tokens) staan ook alleen op je toestel.</li>
+        <li>Het inlogstukje op de server (een serverless functie) geeft verzoeken alleen door aan WHOOP en bewaart <strong>niets</strong>. Het slaat geen tokens, gezondheidsgegevens of persoonsgegevens op.</li>
+      </ul>
+
+      <h2>Delen met anderen</h2>
+      <p>Je gegevens worden niet verkocht en niet gedeeld met derden. Er is geen reclame, geen analytics en geen tracking. Er worden geen tracking-cookies gebruikt.</p>
+      <p>De app draait bij een hostingdienst (bijvoorbeeld Vercel). Zoals bij elke website kan die dienst technische serverlogs bijhouden, zoals je IP-adres en het tijdstip van een verzoek, om de dienst te laten werken en te beveiligen. Gegevens van WHOOP worden alleen opgehaald bij de API van WHOOP, Inc.</p>
+
+      <h2>Bewaartermijn en verwijderen</h2>
+      <ul>
+        <li>Je gegevens blijven op je toestel tot je ze verwijdert. Dat kan via <strong>Trends → Alles verwijderen</strong>, of door de websitegegevens in je browser te wissen.</li>
+        <li>Via <strong>Instellingen → Ontkoppelen</strong> verwijder je de WHOOP-tokens van je toestel. Je kunt de toegang ook intrekken in je WHOOP-account.</li>
+        <li>Met de CSV-export kun je je gegevens zelf meenemen.</li>
+      </ul>
+
+      <h2>Je rechten</h2>
+      <p>Omdat alle gegevens alleen op je eigen toestel staan, heb je er zelf volledige controle over: je kunt ze inzien, exporteren en verwijderen. Er liggen bij de beheerder van deze app geen gegevens over jou.</p>
+
+      <h2>Wijzigingen</h2>
+      <p>Verandert dit beleid, dan wordt deze pagina bijgewerkt en de datum hierboven aangepast.</p>
+
+      <h2>Contact</h2>
+      <p>Vragen over dit privacybeleid? Neem contact op met de beheerder van deze app.</p>
+    </article>
+
+    <article id="en" lang="en" class="card">
+      <h1>Privacy Policy</h1>
+      <p class="muted small">Last updated: November 2, 2026</p>
+
+      <h2>About this app</h2>
+      <p>This web app is built for personal use. It lets you view heart rate, HRV, sleep and recovery from your own WHOOP strap and your own WHOOP account. It is not affiliated with WHOOP, Inc. and does not provide medical advice.</p>
+
+      <h2>Data used</h2>
+      <ul>
+        <li><strong>Via Bluetooth:</strong> heart rate, RR intervals (time between heartbeats) and your strap's battery level.</li>
+        <li><strong>Via the WHOOP API</strong> (only if you choose to connect): sleep, recovery, cycles and strain, workouts, and body measurements (height, weight and maximum heart rate). The app requests <em>read-only</em> scopes. It never writes anything to your WHOOP account.</li>
+        <li><strong>Data you enter yourself:</strong> settings (such as age and weight) and journal entries.</li>
+      </ul>
+
+      <h2>Where data is stored</h2>
+      <ul>
+        <li><strong>Only on your own device</strong>, in your browser's storage (IndexedDB and localStorage). There is no database and no user account for this app.</li>
+        <li>Your WHOOP access tokens are also stored only on your device.</li>
+        <li>The server-side login component (a serverless function) only relays requests to WHOOP and stores <strong>nothing</strong>. It keeps no tokens, health data or personal data.</li>
+      </ul>
+
+      <h2>Sharing</h2>
+      <p>Your data is not sold or shared with third parties. There is no advertising, no analytics and no tracking. No tracking cookies are used.</p>
+      <p>The app is served by a hosting provider (for example Vercel). Like any website, that provider may keep technical server logs, such as your IP address and the time of a request, to operate and secure the service. WHOOP data is only retrieved from the WHOOP, Inc. API.</p>
+
+      <h2>Retention and deletion</h2>
+      <ul>
+        <li>Your data stays on your device until you delete it. You can do this via <strong>Trends → Delete everything</strong>, or by clearing your browser's site data.</li>
+        <li><strong>Settings → Disconnect</strong> removes your WHOOP tokens from your device. You can also revoke access in your WHOOP account.</li>
+        <li>You can take your data with you using the CSV export.</li>
+      </ul>
+
+      <h2>Your rights</h2>
+      <p>Because all data stays on your own device, you are in full control: you can view, export and delete it. The operator of this app holds no data about you.</p>
+
+      <h2>Changes</h2>
+      <p>If this policy changes, this page will be updated and the date above will be revised.</p>
+
+      <h2>Contact</h2>
+      <p>Questions about this privacy policy? Contact the operator of this app.</p>
+    </article>
+  </main>
+</body>
+</html>
